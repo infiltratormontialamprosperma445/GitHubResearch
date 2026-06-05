@@ -40,7 +40,7 @@ function createWindow(): void {
     minHeight: 720,
     title: "Star Intel Desk",
     backgroundColor: "#faf9f5",
-    titleBarStyle: "hiddenInset",
+    ...(process.platform === "darwin" ? { titleBarStyle: "hiddenInset" as const } : {}),
     ...(icon ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, "preload.js"),

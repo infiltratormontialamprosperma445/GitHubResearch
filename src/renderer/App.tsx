@@ -212,12 +212,6 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <div className="titlebar-drag">
-        <span style={{ fontSize: "11px", color: "var(--slate-light)", letterSpacing: "0.04em", fontWeight: 600, textTransform: "uppercase" as const }}>
-          Star Intel Desk
-        </span>
-        <div style={{ flex: 1 }} />
-      </div>
       <header className="topbar" style={{ WebkitAppRegion: "drag" } as CSSProperties}>
         <div className="brand-block">
           <div className="brand-mark">SI</div>
