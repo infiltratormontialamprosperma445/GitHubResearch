@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
@@ -194,9 +194,31 @@ export default function App() {
     });
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "/" && !e.ctrlKey && !e.metaKey && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault();
+        const searchInput = document.querySelector<HTMLInputElement>(".search-box input");
+        searchInput?.focus();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "r") {
+        e.preventDefault();
+        refreshMutation.mutate();
+      }
+    };
+    globalThis.addEventListener("keydown", handleKeyDown);
+    return () => globalThis.removeEventListener("keydown", handleKeyDown);
+  }, [refreshMutation]);
+
   return (
     <div className="app-shell">
-      <header className="topbar">
+      <div className="titlebar-drag">
+        <span style={{ fontSize: "11px", color: "var(--slate-light)", letterSpacing: "0.04em", fontWeight: 600, textTransform: "uppercase" as const }}>
+          Star Intel Desk
+        </span>
+        <div style={{ flex: 1 }} />
+      </div>
+      <header className="topbar" style={{ WebkitAppRegion: "drag" } as CSSProperties}>
         <div className="brand-block">
           <div className="brand-mark">SI</div>
           <div>
@@ -890,12 +912,20 @@ function RepoDrawer({ record, compareSelected, onOpenExternal, onToggleCollectio
     return (
       <aside className="detail-drawer empty">
         <div className="empty-state">
-          <Heart size={32} />
+          <Heart size={36} style={{ opacity: 0.4 }} />
           <h3>{t("drawer.empty")}</h3>
           <p>{t("drawer.notePlaceholder")}</p>
-          <div style={{ display: "flex", gap: "4px", marginTop: "8px" }}>
+          <div style={{ display: "flex", gap: "4px", marginTop: "8px", alignItems: "center" }}>
             <kbd className="kbd-hint">Click</kbd>
             <span style={{ color: "var(--slate-light)", fontSize: "12px" }}>a row to inspect</span>
+          </div>
+          <div style={{ display: "flex", gap: "4px", marginTop: "4px", alignItems: "center" }}>
+            <kbd className="kbd-hint">/</kbd>
+            <span style={{ color: "var(--slate-light)", fontSize: "12px" }}>to search</span>
+          </div>
+          <div style={{ display: "flex", gap: "4px", marginTop: "4px", alignItems: "center" }}>
+            <kbd className="kbd-hint">Ctrl+R</kbd>
+            <span style={{ color: "var(--slate-light)", fontSize: "12px" }}>to refresh</span>
           </div>
         </div>
       </aside>

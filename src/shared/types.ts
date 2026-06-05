@@ -170,6 +170,7 @@ export interface RequestCacheEntry {
   createdAt: string;
   expiresAt: string;
   status: number;
+  etag?: string;
 }
 
 export interface DataQualitySignal {

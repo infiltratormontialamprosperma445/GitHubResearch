@@ -1,8 +1,36 @@
-# Star Intel Desk v1.0.0
+<div align="center">
+  <img src="build/icon.png" alt="Star Intel Desk" width="120" height="120">
+  <h1>Star Intel Desk</h1>
+  <h3>Local-First GitHub Intelligence Workspace</h3>
+  <p>Track trending repositories with AI-powered classification across 6 data sources</p>
 
-Local-first desktop GitHub trending intelligence workspace. Track high-star and fast-growing repositories daily, classify across AI, developer tools, frontend, backend, data, security, infrastructure with 6 coordinated data sources and AI-powered classification.
+  <p>
+    <a href="https://github.com/zrz2004/GithubSearch/releases/latest">
+      <img src="https://img.shields.io/github/v/release/zrz2004/GithubSearch?style=flat-square&color=c2553a" alt="Release">
+    </a>
+    <a href="https://github.com/zrz2004/GithubSearch/blob/main/LICENSE">
+      <img src="https://img.shields.io/github/license/zrz2004/GithubSearch?style=flat-square" alt="License">
+    </a>
+    <a href="https://github.com/zrz2004/GithubSearch/stargazers">
+      <img src="https://img.shields.io/github/stars/zrz2004/GithubSearch?style=flat-square" alt="Stars">
+    </a>
+    <a href="https://github.com/zrz2004/GithubSearch/issues">
+      <img src="https://img.shields.io/github/issues/zrz2004/GithubSearch?style=flat-square" alt="Issues">
+    </a>
+    <img src="https://img.shields.io/badge/Electron-42-47848F?style=flat-square&logo=electron" alt="Electron">
+    <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react" alt="React">
+    <img src="https://img.shields.io/badge/TypeScript-6-3178C6?style=flat-square&logo=typescript" alt="TypeScript">
+  </p>
 
-本地优先的桌面 GitHub 趋势情报工作台，每日追踪高星与快速增长项目，覆盖 AI、开发工具、前端、后端、数据、安全、基础设施等方向。支持 GitHub、Telegram、X (Twitter) 六大数据源协同采集，AI 自动分类与排名。
+  <p>
+    <a href="#quick-start">Quick Start</a> •
+    <a href="#features">Features</a> •
+    <a href="#data-sources">Data Sources</a> •
+    <a href="#ai-classification">AI Classification</a> •
+    <a href="#architecture">Architecture</a> •
+    <a href="#roadmap">Roadmap</a>
+  </p>
+</div>
 
 ---
 
@@ -12,60 +40,84 @@ Local-first desktop GitHub trending intelligence workspace. Track high-star and 
 
 - **Node.js** >= 18 (recommended 20+)
 - **npm** >= 9
-- **Windows 10/11 x64**
 
 ### Install & Run
 
-```powershell
+```bash
 git clone https://github.com/zrz2004/GithubSearch.git
 cd GithubSearch
 npm install
 npm run dev
 ```
 
-### Build Windows Installer
+### Build Installer
 
-```powershell
+```bash
+# Windows
 npm run dist:win
+
+# macOS
+npm run dist:mac
+
+# Linux
+npm run dist:linux
 ```
 
-Output in `release/`:
+## Download
 
-- `Star Intel Desk-1.0.0-win-x64.exe` — NSIS installer
-- `win-unpacked/Star Intel Desk.exe` — portable executable
+### Latest Release: v1.1.0
+
+| Platform | Architecture | Download |
+|----------|:---:|:---:|
+| **Windows** | x64 | [NSIS Installer](https://github.com/zrz2004/GithubSearch/releases/latest) • [Portable](https://github.com/zrz2004/GithubSearch/releases/latest) |
+| **macOS** | Intel / Apple Silicon | [DMG](https://github.com/zrz2004/GithubSearch/releases/latest) |
+| **Linux** | x64 | [AppImage](https://github.com/zrz2004/GithubSearch/releases/latest) • [deb](https://github.com/zrz2004/GithubSearch/releases/latest) |
+
+[View All Releases](https://github.com/zrz2004/GithubSearch/releases)
+
+---
+
+## Features
+
+- **Six Data Sources** — GitHub Trending, GitHub Search API, Telegram AI Channels, X (Twitter) AI Signals, GH Archive WatchEvents, Supplemental Catalog
+- **AI Classification** — 11 AI subcategories with hundreds of keyword vectors, plus Developer Tools, Frontend, Backend, Data, Security, Infrastructure
+- **Multi-Factor Ranking** — Growth score, source diversity, activity, quality, and risk penalty
+- **Local-First** — SQLite database via sql.js (WASM), zero cloud dependency, full data privacy
+- **Real-Time Updates** — Automated daily refresh with customizable schedule
+- **Cross-Platform** — Windows, macOS, Linux with native installers
+- **Bilingual** — English and Chinese interface
+- **Desktop-Native** — Custom titlebar, frosted-glass topbar, keyboard shortcuts, dark mode support
+
+### Feature Modules
+
+| Module | Description |
+|--------|-------------|
+| **Dashboard** | Hot repos, category leaders, anomaly detection, source health overview |
+| **Trending Explorer** | Browse trending repos by time window with search and category filters |
+| **Category Intelligence** | Distribution across 11+ AI subcategories with top project rankings |
+| **Compare** | Side-by-side comparison of up to 5 repositories with sparkline trends |
+| **Learning Hub** | Export Markdown learning notes from saved repos |
+| **Alerts** | Custom keyword, category, and repository alert rules |
+| **Data Sources** | Health status, weight, and coverage metrics for all 6 sources |
+| **Classifier Lab** | View and correct AI classification results with manual override |
+| **Settings** | Token, proxy, AI config, refresh schedule, backup management |
 
 ---
 
 ## Data Refresh Guide
 
-This is the most important section for new users: how to successfully pull real data.
+### Step 1: Configure GitHub Token (Highly Recommended)
 
-### Step 1: Open Settings
-
-Launch the app and click **Settings** in the left sidebar.
-
-### Step 2: Configure GitHub Token (Highly Recommended)
-
-GitHub Token is the single most important configuration for successful data refresh.
-
-**Why?**
-- Without Token: GitHub API rate limit is **60 requests/hour** (by IP), refresh will fail
-- With Token: rate limit increases to **5000 requests/hour**, enough for a full refresh
-- Token also enables enhanced repository enrichment (descriptions, topics, licenses)
-
-**How to create a Token:**
+GitHub Token is critical for successful data refresh:
+- **Without Token**: GitHub API rate limit is 60 requests/hour — refresh may fail
+- **With Token**: Rate limit increases to 5,000 requests/hour — full refresh succeeds
 
 1. Go to https://github.com/settings/tokens
 2. Click **Generate new token (classic)**
-3. Name it `star-intel-desk`
-4. Check **public_repo** scope (read-only public repos, no other permissions needed)
-5. Generate and copy the token (format: `ghp_xxxxxxxx...`)
+3. Name it `star-intel-desk`, check **public_repo** scope
+4. Paste into **Settings > GitHub Token**, click **Save**, then **Test GitHub**
 
-Paste it into the **GitHub Token** field in Settings, click **Save Settings**, then click **Test GitHub** to verify.
-
-### Step 3: Configure Proxy (If Network is Restricted)
-
-If you cannot access GitHub, Telegram, or other data sources directly, configure an HTTP proxy:
+### Step 2: Configure Proxy (If Needed)
 
 ```
 http://127.0.0.1:7890
@@ -73,72 +125,32 @@ http://127.0.0.1:1080
 socks5://127.0.0.1:1080
 ```
 
-### Step 4: Configure AI API Key (Optional)
+### Step 3: Configure AI API Key (Optional)
 
-Used for automatic classification refinement when rule-based classifier has low confidence. Supports any OpenAI-compatible endpoint (OpenAI, Ollama, Azure, etc.).
+For automatic classification refinement when rule-based classifier has low confidence. Supports any OpenAI-compatible endpoint (OpenAI, Ollama, Azure). **Not required** — the built-in classifier covers all categories.
 
-**Not required** — the rule-based classifier covers 11 AI subcategories with high accuracy.
+### Step 4: Trigger Refresh
 
-### Step 5: Trigger Refresh
-
-**Manual refresh (recommended for first-time users):**
-
-Click the **Refresh** button in the top bar. The app will collect data across daily/weekly/monthly windows with all 6 data sources running concurrently.
-
-**Scheduled refresh:**
-
-Enable **Background Refresh** in Settings and set a **Refresh Time** (default: `08:30`). The app auto-refreshes once daily.
+Click the **Refresh** button or press `Ctrl+R`. The app collects data across daily/weekly/monthly windows with all 6 sources running concurrently.
 
 ### Refresh Pipeline
 
 ```
-Discover → Canonicalize → Observe → Snapshot → Classify → AI Review (optional) → Score → Alert
+Discover → Canonicalize → Observe → Snapshot → Classify → AI Review → Score → Alert
 ```
 
 ---
 
-## Troubleshooting
-
-### GitHub API Rate Limit (403)
-
-**Symptom:** Refresh log shows `rate limit` or `403`.
-**Fix:** Configure a GitHub Token (Step 2). Wait for the rate limit window to reset (~1 hour).
-
-### Network Timeout
-
-**Symptom:** All sources fail with `timeout`, `ECONNREFUSED`, `ENOTFOUND`.
-**Fix:** Check network access to `https://api.github.com`. Configure a proxy (Step 3).
-
-### Telegram Channels Unavailable
-
-**Symptom:** Telegram source shows `degraded`.
-**Fix:** Some Telegram channels may require login. The adapter skips inaccessible channels automatically. Ensure proxy allows `t.me`. This is a non-critical source.
-
-### X (Twitter) Source Unstable
-
-**Symptom:** X source shows `degraded`.
-**Fix:** X relies on Nitter public instances which may go down. Supplemental feeds (HuggingFace Papers, PapersWithCode) still work. This is expected behavior.
-
-### Refresh Succeeds But No Data
-
-**Fix:** Switch time windows (try "Month"). Check category filters. Visit Data Sources page for health status.
-
-### Browser Preview Cannot Refresh
-
-**Fix:** Expected. Browser preview uses bundled sample data. Live refresh requires Electron (`npm start` or `npm run dev`).
-
----
-
-## Six Data Sources
+## Data Sources
 
 | Source | Description | Weight | Config |
-|--------|-------------|--------|--------|
+|--------|-------------|:------:|--------|
 | GitHub Trending | Trending page scraping (daily/weekly/monthly) | 1.0 | None |
 | GitHub Search API | 30+ AI-focused queries, concurrent execution | 0.9 | Token recommended |
-| Telegram AI Channels | 10 curated AI channels via `t.me/s/` preview | 0.7 | None (needs `t.me` access) |
+| Telegram AI Channels | 10 curated AI channels via `t.me/s/` preview | 0.7 | None |
 | X (Twitter) AI Signals | Nitter search + HuggingFace Papers + PapersWithCode | 0.65 | None |
-| Supplemental Catalog | Curated cross-domain trend supplement | 0.45 | None |
 | GH Archive WatchEvents | Real-time star event sampling from gharchive.org | 0.85 | None |
+| Supplemental Catalog | Curated cross-domain trend supplement | 0.45 | None |
 
 ---
 
@@ -162,59 +174,17 @@ Discover → Canonicalize → Observe → Snapshot → Classify → AI Review (o
 | Training / Fine-tune | `lora`, `qlora`, `peft`, `deepspeed` |
 | Data / Infra | `data pipeline`, `feature store`, `mlflow` |
 
-Also covers Developer Tools, Frontend, Backend, Data, Security, Infrastructure.
+Also covers Developer Tools, Frontend, Backend, Data, Security, Infrastructure categories.
 
 ### AI Refinement (Optional)
 
 Low-confidence classifications are sent to an OpenAI-compatible API for secondary confirmation. Skipped when no API key is configured.
 
-### Manual Override
-
-Users can manually reclassify any repository in the Classifier Lab. Overrides persist permanently and take priority over rules and AI.
-
 ---
 
-## Feature Modules
+## Architecture
 
-| Module | Description |
-|--------|-------------|
-| Dashboard | Hot repos, category leaders, anomaly detection, source health |
-| Trending Explorer | Browse trending repos by time window with search and filters |
-| Category Intelligence | Distribution and ranking across 11+ categories |
-| Compare | Side-by-side comparison of up to 5 repositories |
-| Learning Hub | Export Markdown learning notes from saved repos |
-| Alerts | Custom keyword/category/repository alert rules |
-| Data Sources | Health status, weight, and coverage for all 6 sources |
-| Classifier Lab | View and correct classification results |
-| Settings | Token, proxy, AI config, refresh schedule, backup |
-
----
-
-## Data Storage & Backup
-
-### Local SQLite Database
-
-All data stored locally via `sql.js` (WebAssembly SQLite):
-
-- Repositories, source observations, snapshots
-- Classifications, ranking scores
-- User notes, tags, alert rules
-- Refresh job history, rate limit states
-- Request cache, manual classification rules
-
-8 performance indexes ensure fast queries even with large datasets.
-
-### Backup
-
-Click **Backup data** in Settings. SQLite file is copied to the configured backup directory (or `backups/` in app data by default).
-
-### Credential Security
-
-GitHub Token and AI API Key are encrypted via Electron `safeStorage`. Sensitive values are redacted from runtime error messages.
-
----
-
-## Project Structure
+### Project Structure
 
 ```
 star-intel-desk/
@@ -235,41 +205,66 @@ star-intel-desk/
 │   │   ├── classifier.ts        # Rule-based classifier (11 AI subcategories)
 │   │   └── ranking.ts           # Multi-factor ranking algorithm
 │   └── renderer/                # React frontend
-│       ├── App.tsx              # Main UI (900+ lines, 12 components)
+│       ├── App.tsx              # Main UI (1000+ lines, 15+ components)
 │       ├── api.ts               # Frontend API (IPC + browser fallback)
 │       ├── i18n.tsx             # EN/ZH internationalization
-│       └── styles.css           # Claude/Anthropic-inspired styles
+│       └── styles.css           # Claude/Anthropic-inspired design system
+├── .github/workflows/           # CI/CD automation
+│   └── release.yml              # Multi-platform build pipeline
 ├── build/                       # Build assets (icons)
 ├── docs/                        # Supplementary documentation
-├── scripts/                     # Build scripts
-└── release/                     # Build output (gitignored)
+└── scripts/                     # Build scripts
 ```
+
+### Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Framework** | Electron 42 |
+| **UI** | React 19 + Vite 8 |
+| **Language** | TypeScript 6 |
+| **Database** | sql.js (SQLite WASM) |
+| **State** | @tanstack/react-query v5 |
+| **HTTP** | undici (with proxy support) |
+| **Icons** | lucide-react |
+| **Styling** | CSS Variables + Claude-inspired design system |
+| **Packaging** | electron-builder |
+| **CI/CD** | GitHub Actions |
 
 ---
 
 ## Performance Optimizations
 
-- **N+1 query fix:** `listRepos` uses batch IN queries (401 queries → 3 for 200 repos)
-- **Concurrent adapters:** All 6 sources run via `Promise.allSettled` per time window
-- **Parallel search:** GitHub Search queries execute with concurrency limit of 4
-- **Batch enrichment:** Repository detail fetching runs at concurrency 5
-- **Request cache:** SHA256-hashed cache keys with configurable TTL (default 6 hours)
-- **Concurrency control:** `runWithConcurrency` prevents request storms on social sources
-- **8 SQLite indexes:** Optimized for batch queries, sorting, and cache expiration
+- **N+1 query fix** — Batch IN queries (401 queries → 3 for 200 repos)
+- **Query cache** — In-memory TTL cache with automatic invalidation on writes
+- **Smart retry** — Exponential backoff with jitter for API resilience
+- **ETag caching** — Conditional HTTP requests to minimize bandwidth
+- **Concurrent adapters** — All 6 sources run via `Promise.allSettled` per window
+- **Parallel search** — GitHub Search queries execute with concurrency limit of 4
+- **Batch enrichment** — Repository detail fetching at concurrency 5
+- **16 SQLite indexes** — Optimized for batch queries, sorting, and cache expiration
+- **Performance pragmas** — WAL mode, cache_size, temp_store tuning
+- **Compression** — gzip/deflate Accept-Encoding for GitHub API responses
 
 ---
 
-## Tech Stack
+## Data Storage & Backup
 
-- **Electron 42** — Desktop framework
-- **React 19** — UI framework
-- **Vite 8** — Build tool
-- **TypeScript 6** — Type safety
-- **sql.js** (SQLite WASM) — Local database
-- **@tanstack/react-query** — Data fetching & cache
-- **undici** — HTTP client with proxy support
-- **lucide-react** — Icon library
-- **electron-builder** — Packaging
+### Local SQLite Database
+
+All data stored locally via `sql.js` (WebAssembly SQLite):
+
+- Repositories, source observations, snapshots
+- Classifications, ranking scores, evidence trails
+- User notes, tags, alert rules
+- Refresh job history, rate limit states
+- Request cache with ETag support, manual classification rules
+
+16 performance indexes ensure fast queries even with large datasets.
+
+### Backup
+
+Click **Backup data** in Settings. SQLite file is copied to the configured backup directory.
 
 ---
 
@@ -281,22 +276,74 @@ star-intel-desk/
 | `npm run build` | Production build (TypeScript + Vite) |
 | `npm start` | Build and launch app |
 | `npm run dist:win` | Package Windows x64 (NSIS + Portable) |
-| `npm run pack:win` | Package unpacked Windows directory |
+| `npm run dist:mac` | Package macOS (DMG + Zip) |
+| `npm run dist:linux` | Package Linux (AppImage + deb + rpm) |
+| `npm run dist:all` | Package all platforms |
 | `npm test` | Run tests |
 | `npm run preview` | Browser UI preview |
 
 ---
 
-## Browser Preview
+## Keyboard Shortcuts
 
-```powershell
-npm run preview -- --host 127.0.0.1 --port 4173
+| Shortcut | Action |
+|----------|--------|
+| `/` | Focus search input |
+| `Ctrl+R` / `Cmd+R` | Trigger data refresh |
+
+---
+
+## Roadmap
+
+- [ ] Dark mode toggle in UI (CSS variables ready)
+- [ ] Advanced search filters (`language:typescript stars:>1000`)
+- [ ] FTS5 full-text search engine
+- [ ] Virtual scroll for large datasets
+- [ ] GitHub GraphQL API migration
+- [ ] Local AI model integration (Ollama/llama.cpp)
+- [ ] Browser extension for capturing repos
+- [ ] Data sync via encrypted Gist backup
+
+---
+
+## Troubleshooting
+
+**GitHub API Rate Limit (403):** Configure a GitHub Token. Wait ~1 hour for rate limit reset.
+
+**Network Timeout:** Check access to `https://api.github.com`. Configure a proxy in Settings.
+
+**Telegram/X Degraded:** Non-critical sources. The adapter skips inaccessible channels automatically.
+
+**Refresh Succeeds But No Data:** Switch time windows. Check category filters. Visit Data Sources page.
+
+**Browser Preview Cannot Refresh:** Expected. Live refresh requires Electron (`npm start` or `npm run dev`).
+
+---
+
+## Contributing
+
+Contributions are welcome! Please follow the commit convention:
+
 ```
+<type>(<scope>): <subject>
 
-Open `http://127.0.0.1:4173`. Uses bundled sample data. Live refresh requires Electron.
+Types: feat, fix, perf, style, refactor, test, docs, chore, ci
+Scopes: ui, perf, db, api, build, deps
+```
 
 ---
 
 ## License
 
-MIT
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+  <p>Built with Electron, React, and TypeScript. Inspired by Claude.ai design language.</p>
+  <p>
+    <a href="https://github.com/zrz2004/GithubSearch">GitHub</a> •
+    <a href="https://github.com/zrz2004/GithubSearch/issues">Report Bug</a> •
+    <a href="https://github.com/zrz2004/GithubSearch/discussions">Discussions</a>
+  </p>
+</div>

@@ -10,6 +10,30 @@ import { ProxyAgent } from "undici";
 
 const USER_AGENT = "Star-Intel-Desk/0.1";
 
+async function smartRetry<T>(
+  fn: () => Promise<T>,
+  options: { maxRetries?: number; baseDelay?: number; maxDelay?: number; jitter?: boolean } = {}
+): Promise<T> {
+  const { maxRetries = 3, baseDelay = 1000, maxDelay = 10000, jitter = true } = options;
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt === maxRetries) break;
+      const isRateLimit = lastError.message.includes("429") || lastError.message.includes("rate limit");
+      const delay = Math.min(
+        maxDelay,
+        baseDelay * Math.pow(2, attempt) * (isRateLimit ? 3 : 1)
+      );
+      const jitteredDelay = jitter ? delay * (0.5 + Math.random() * 0.5) : delay;
+      await new Promise((resolve) => setTimeout(resolve, jitteredDelay));
+    }
+  }
+  throw lastError;
+}
+
 async function runWithConcurrency<T>(
   tasks: Array<() => Promise<T>>,
   concurrency: number
@@ -41,9 +65,9 @@ export class GitHubTrendingAdapter implements SourceAdapter {
   async discover(window: TrendWindow, settings: SourceSettings): Promise<DiscoveredRepository[]> {
     if (window === "historical") return [];
     const since = window === "daily" ? "daily" : window === "weekly" ? "weekly" : "monthly";
-    const response = await cachedFetch(`https://github.com/trending?since=${since}`, {
+    const response = await smartRetry(() => cachedFetch(`https://github.com/trending?since=${since}`, {
       headers: { "User-Agent": USER_AGENT }
-    }, settings, this.label, true);
+    }, settings, this.label, true));
     if (!response.ok) throw new Error(`GitHub Trending responded ${response.status}`);
     const html = await response.text();
     const repos = parseTrending(html, window);
@@ -106,7 +130,7 @@ export class GitHubSearchAdapter implements SourceAdapter {
       url.searchParams.set("sort", "stars");
       url.searchParams.set("order", "desc");
       url.searchParams.set("per_page", String(Math.min(settings.maxReposPerWindow ?? 40, settings.githubToken ? 50 : 24)));
-      const response = await githubFetch(url.toString(), settings);
+      const response = await smartRetry(() => githubFetch(url.toString(), settings));
       if (!response.ok) throw new Error(`GitHub Search responded ${response.status}`);
       const payload = (await response.json()) as { items?: GitHubRepoPayload[] };
       return (payload.items ?? []).map((item, index) => {
@@ -226,7 +250,7 @@ export class GhArchiveAdapter implements SourceAdapter {
     const eventDates = archiveHourUrls(hours);
     await runWithConcurrency(
       eventDates.map(({ url }) => async (): Promise<void> => {
-        const response = await proxiedFetch(url, { headers: { "User-Agent": USER_AGENT } }, settings);
+        const response = await smartRetry(() => proxiedFetch(url, { headers: { "User-Agent": USER_AGENT } }, settings));
         if (!response.ok) return;
         const buffer = Buffer.from(await response.arrayBuffer());
         const body = decodeGhArchiveBody(buffer);
@@ -296,7 +320,7 @@ export class GhArchiveAdapter implements SourceAdapter {
 
 export async function enrichGitHubRepository(fullName: string, settingsOrToken?: SourceSettings | string): Promise<Repository> {
   const settings = typeof settingsOrToken === "string" ? { githubToken: settingsOrToken } : settingsOrToken ?? {};
-  const response = await githubFetch(`https://api.github.com/repos/${fullName}`, settings);
+  const response = await smartRetry(() => githubFetch(`https://api.github.com/repos/${fullName}`, settings));
   if (!response.ok) throw new Error(`GitHub repo ${fullName} responded ${response.status}`);
   const repo = repoFromPayload((await response.json()) as GitHubRepoPayload);
   const readme = await fetchReadme(fullName, settings).catch(() => undefined);
@@ -427,6 +451,7 @@ function decodeGhArchiveBody(buffer: Buffer): string {
 async function githubFetch(url: string, settings: SourceSettings = {}): Promise<Response> {
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
+    "Accept-Encoding": "gzip, deflate",
     "User-Agent": USER_AGENT,
     "X-GitHub-Api-Version": "2022-11-28"
   };
@@ -454,6 +479,40 @@ async function cachedFetch(
   if (cacheable && method === "GET") {
     const cached = settings.getCache?.(key);
     if (cached) {
+      const cachedETag = cached.headers?.etag ?? cached.headers?.ETag;
+      if (cachedETag) {
+        const conditionalHeaders = new Headers(init.headers);
+        conditionalHeaders.set("If-None-Match", cachedETag);
+        const conditionalInit = { ...init, headers: conditionalHeaders };
+        const conditionalResponse = await proxiedFetch(url, conditionalInit, settings);
+        recordRateLimitFromHeaders(source, conditionalResponse, settings);
+        if (conditionalResponse.status === 304) {
+          return new Response(cached.body, {
+            status: cached.status,
+            headers: cached.headers
+          });
+        }
+        if (conditionalResponse.ok) {
+          const body = await conditionalResponse.clone().text();
+          const createdAt = new Date();
+          const ttlHours = settings.cacheTtlHours ?? 6;
+          settings.setCache?.({
+            key,
+            url,
+            method,
+            body,
+            headers: Object.fromEntries(conditionalResponse.headers.entries()),
+            status: conditionalResponse.status,
+            createdAt: createdAt.toISOString(),
+            expiresAt: new Date(createdAt.getTime() + ttlHours * 3_600_000).toISOString()
+          });
+          return new Response(body, {
+            status: conditionalResponse.status,
+            headers: conditionalResponse.headers
+          });
+        }
+        return conditionalResponse;
+      }
       return new Response(cached.body, {
         status: cached.status,
         headers: cached.headers
@@ -467,13 +526,16 @@ async function cachedFetch(
     const body = await response.clone().text();
     const createdAt = new Date();
     const ttlHours = settings.cacheTtlHours ?? 6;
+    const responseHeaders = Object.fromEntries(response.headers.entries());
+    const etag = response.headers.get("etag") ?? undefined;
     settings.setCache?.({
       key,
       url,
       method,
       body,
-      headers: Object.fromEntries(response.headers.entries()),
+      headers: responseHeaders,
       status: response.status,
+      etag,
       createdAt: createdAt.toISOString(),
       expiresAt: new Date(createdAt.getTime() + ttlHours * 3_600_000).toISOString()
     });

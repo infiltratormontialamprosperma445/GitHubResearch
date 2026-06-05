@@ -1,7 +1,7 @@
 {
   "name": "star-intel-desk",
-  "version": "1.0.0",
-  "description": "Local-first desktop intelligence workspace for tracking trending GitHub repositories with AI classification.",
+  "version": "1.1.0",
+  "description": "Local-first desktop GitHub trending intelligence workspace. Track trending repositories with AI-powered classification across 6 data sources.",
   "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "npm run build:main && concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
@@ -12,6 +12,10 @@
     "start": "npm run build && electron .",
     "pack:win": "npm run prepare:icons && npm run build && electron-builder --win --dir",
     "dist:win": "npm run prepare:icons && npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:all": "npm run build && electron-builder --win --mac --linux",
+    "dist": "npm run dist:win",
     "test": "vitest run"
   },
   "keywords": [
@@ -21,14 +25,23 @@
     "intelligence",
     "ai",
     "telegram",
-    "twitter"
+    "twitter",
+    "desktop-app",
+    "sqlite",
+    "react",
+    "typescript",
+    "developer-tools",
+    "cross-platform"
   ],
-  "author": "",
+  "author": "zrz2004",
   "license": "MIT",
   "type": "module",
   "build": {
-    "appId": "local.star-intel.desk",
+    "appId": "com.star-intel-desk.app",
     "productName": "Star Intel Desk",
+    "copyright": "Copyright © 2025 zrz2004",
+    "asar": true,
+    "asarUnpack": ["**/*.wasm", "**/*.node"],
     "directories": {
       "buildResources": "build",
       "output": "release"
@@ -62,6 +75,7 @@
         }
       ],
       "icon": "build/icon.ico",
+      "requestedExecutionLevel": "asInvoker",
       "signAndEditExecutable": false
     },
     "nsis": {
@@ -71,8 +85,54 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Star Intel Desk"
-    }
+      "shortcutName": "Star Intel Desk",
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable-${arch}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        },
+        {
+          "target": "rpm",
+          "arch": ["x64"]
+        }
+      ],
+      "category": "Development",
+      "synopsis": "GitHub Intelligence Workspace",
+      "description": "Local-first desktop intelligence workspace for tracking trending GitHub repositories with AI classification."
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "zrz2004",
+        "repo": "GithubSearch",
+        "releaseType": "release"
+      }
+    ]
   },
   "dependencies": {
     "@tanstack/react-query": "^5.100.14",

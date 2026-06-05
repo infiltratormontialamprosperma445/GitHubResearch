@@ -30,7 +30,41 @@ const SQL_WASM_PATH = require.resolve("sql.js/dist/sql-wasm.wasm");
 
 type Row = Record<string, string | number | null>;
 
+class QueryCache {
+  private cache = new Map<string, { value: unknown; expiresAt: number }>();
+  private defaultTtl: number;
+
+  constructor(ttlMs = 5000) {
+    this.defaultTtl = ttlMs;
+  }
+
+  get<T>(key: string): T | undefined {
+    const entry = this.cache.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return undefined;
+    }
+    return entry.value as T;
+  }
+
+  set(key: string, value: unknown, ttlMs?: number): void {
+    this.cache.set(key, { value, expiresAt: Date.now() + (ttlMs ?? this.defaultTtl) });
+  }
+
+  invalidate(pattern?: string): void {
+    if (!pattern) { this.cache.clear(); return; }
+    for (const key of this.cache.keys()) {
+      if (key.includes(pattern)) this.cache.delete(key);
+    }
+  }
+
+  get size(): number { return this.cache.size; }
+}
+
 export class AppDatabase {
+  private queryCache = new QueryCache(3000);
+
   private constructor(
     private readonly db: SqlJsDatabase,
     private readonly dbPath: string
@@ -58,6 +92,7 @@ export class AppDatabase {
 
   persist(): void {
     writeFileSync(this.dbPath, Buffer.from(this.db.export()));
+    this.queryCache.invalidate();
   }
 
   migrate(): void {
@@ -286,6 +321,18 @@ export class AppDatabase {
     this.addColumnIfMissing("ranking_scores", "dedupe_confidence", "REAL NOT NULL DEFAULT 0.7");
     this.addColumnIfMissing("ranking_scores", "anomaly_reasons", "TEXT NOT NULL DEFAULT '[]'");
 
+    // Performance pragmas — sql.js WASM SQLite may not support all of these,
+    // so each is wrapped in try/catch to avoid breaking migration.
+    const pragmas = [
+      "PRAGMA journal_mode=WAL",
+      "PRAGMA synchronous=NORMAL",
+      "PRAGMA cache_size=-8192",
+      "PRAGMA temp_store=MEMORY"
+    ];
+    for (const pragma of pragmas) {
+      try { this.db.run(pragma); } catch { /* unsupported in sql.js WASM */ }
+    }
+
     // Performance indexes for batch queries and common lookups
     this.db.run(`
       CREATE INDEX IF NOT EXISTS idx_observations_repo_id ON source_observations(repo_id);
@@ -296,6 +343,18 @@ export class AppDatabase {
       CREATE INDEX IF NOT EXISTS idx_repositories_full_name ON repositories(full_name);
       CREATE INDEX IF NOT EXISTS idx_repositories_stars ON repositories(stars DESC);
       CREATE INDEX IF NOT EXISTS idx_cache_expires ON request_cache(expires_at);
+    `);
+
+    // Additional composite indexes for common query patterns
+    this.db.run(`
+      CREATE INDEX IF NOT EXISTS idx_observations_source_window ON source_observations(source, trend_window);
+      CREATE INDEX IF NOT EXISTS idx_snapshots_repo_window ON repo_snapshots(repo_id, trend_window);
+      CREATE INDEX IF NOT EXISTS idx_repositories_language ON repositories(language);
+      CREATE INDEX IF NOT EXISTS idx_repositories_pushed ON repositories(pushed_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_classifications_confidence ON classifications(confidence DESC);
+      CREATE INDEX IF NOT EXISTS idx_refresh_jobs_status ON refresh_jobs(status, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_job_steps_job ON job_steps(job_id, started_at);
+      CREATE INDEX IF NOT EXISTS idx_source_health_enabled ON source_health(enabled, weight DESC);
     `);
 
     // Add source health entries for new social adapters
@@ -326,6 +385,7 @@ export class AppDatabase {
         "INSERT OR REPLACE INTO repository_aliases (alias_full_name, repo_id, observed_at) VALUES (?, ?, ?)",
         [repo.fullName, existingRepo.id, new Date().toISOString()]
       );
+      this.queryCache.invalidate();
     }
     return { ...repo, id: existingRepo.id };
   }
@@ -372,6 +432,7 @@ export class AppDatabase {
         repo.lastSeenAt
       ]
     );
+    this.queryCache.invalidate();
   }
 
   upsertClassification(classification: Classification): void {
@@ -407,6 +468,7 @@ export class AppDatabase {
         classification.updatedAt
       ]
     );
+    this.queryCache.invalidate();
   }
 
   insertObservation(observation: SourceObservation): void {
@@ -427,6 +489,7 @@ export class AppDatabase {
         JSON.stringify(observation.metadata ?? {})
       ]
     );
+    this.queryCache.invalidate();
   }
 
   insertSnapshot(snapshot: RepoSnapshot): void {
@@ -445,6 +508,7 @@ export class AppDatabase {
         snapshot.growth
       ]
     );
+    this.queryCache.invalidate();
   }
 
   upsertRanking(ranking: RankingScore): void {
@@ -483,6 +547,7 @@ export class AppDatabase {
         ranking.computedAt
       ]
     );
+    this.queryCache.invalidate();
   }
 
   insertTrendRun(run: TrendRun): void {
@@ -501,6 +566,7 @@ export class AppDatabase {
         run.discoveredCount
       ]
     );
+    this.queryCache.invalidate();
   }
 
   upsertRefreshJob(job: RefreshJob): void {
@@ -524,6 +590,7 @@ export class AppDatabase {
     for (const step of job.steps) {
       this.upsertJobStep(step);
     }
+    this.queryCache.invalidate();
   }
 
   upsertJobStep(step: JobStep): void {
@@ -544,6 +611,7 @@ export class AppDatabase {
         step.count
       ]
     );
+    this.queryCache.invalidate();
   }
 
   latestRefreshJob(): RefreshJob | undefined {
@@ -566,6 +634,7 @@ export class AppDatabase {
         state.status
       ]
     );
+    this.queryCache.invalidate();
   }
 
   rateLimits(): RateLimitState[] {
@@ -599,10 +668,12 @@ export class AppDatabase {
         entry.status
       ]
     );
+    this.queryCache.invalidate();
   }
 
   purgeExpiredCache(): void {
     this.db.run("DELETE FROM request_cache WHERE expires_at < ?", [new Date().toISOString()]);
+    this.queryCache.invalidate();
   }
 
   manualRules(): ManualClassificationRule[] {
@@ -625,6 +696,7 @@ export class AppDatabase {
         rule.updatedAt
       ]
     );
+    this.queryCache.invalidate();
   }
 
   backupTo(targetPath: string): string {
@@ -659,9 +731,15 @@ export class AppDatabase {
         health.coverage
       ]
     );
+    this.queryCache.invalidate();
   }
 
   listRepos(filters: RepoFilters): RepoRecord[] {
+    // Check query cache first
+    const cacheKey = `listRepos:${JSON.stringify(filters)}`;
+    const cached = this.queryCache.get<RepoRecord[]>(cacheKey);
+    if (cached) return cached;
+
     const where: string[] = ["r.id = c.repo_id", "r.id = rs.repo_id", "rs.trend_window = ?"];
     const params: Array<string | number> = [filters.window === "historical" ? "monthly" : filters.window];
     if (filters.search) {
@@ -713,7 +791,11 @@ export class AppDatabase {
     const repoIds = rows.map((row) => String(row.id));
     const observationMap = this.batchLoadObservations(repoIds);
     const snapshotMap = this.batchLoadSnapshots(repoIds);
-    return rows.map((row) => this.recordFromJoinedRow(row, observationMap, snapshotMap));
+    const results = rows.map((row) => this.recordFromJoinedRow(row, observationMap, snapshotMap));
+
+    // Store in query cache for subsequent reads
+    this.queryCache.set(cacheKey, results);
+    return results;
   }
 
   getRepo(repoId: string): RepoRecord | undefined {
@@ -810,12 +892,14 @@ export class AppDatabase {
 
   updateSetting(key: string, value: string): void {
     this.db.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [key, value]);
+    this.queryCache.invalidate();
   }
 
   toggleCollection(repoId: string, status = "backlog"): void {
     const existing = this.rows<Row>("SELECT repo_id FROM collections WHERE repo_id = ?", [repoId])[0];
     if (existing) {
       this.db.run("DELETE FROM collections WHERE repo_id = ?", [repoId]);
+      this.queryCache.invalidate();
       return;
     }
     this.db.run("INSERT INTO collections (repo_id, status, added_at) VALUES (?, ?, ?)", [
@@ -823,6 +907,7 @@ export class AppDatabase {
       status,
       new Date().toISOString()
     ]);
+    this.queryCache.invalidate();
   }
 
   saveNote(repoId: string, markdown: string, tags: string[], status: string): void {
@@ -841,6 +926,7 @@ export class AppDatabase {
       status,
       new Date().toISOString()
     ]);
+    this.queryCache.invalidate();
   }
 
   saveAlert(rule: Omit<AlertRule, "id" | "createdAt">): AlertRule {
@@ -856,6 +942,7 @@ export class AppDatabase {
       alert.enabled ? 1 : 0,
       alert.createdAt
     ]);
+    this.queryCache.invalidate();
     return alert;
   }
 
