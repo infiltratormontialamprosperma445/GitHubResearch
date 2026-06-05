@@ -65,7 +65,7 @@ npm run dist:linux
 
 ## Download
 
-### Latest Release: v1.1.0
+### Latest Release: v1.0.0
 
 | Platform | Architecture | Download |
 |----------|:---:|:---:|

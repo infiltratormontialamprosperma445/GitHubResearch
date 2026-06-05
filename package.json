@@ -1,6 +1,6 @@
 {
   "name": "star-intel-desk",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "description": "Local-first desktop GitHub trending intelligence workspace. Track trending repositories with AI-powered classification across 6 data sources.",
   "main": "dist-electron/electron/main.js",
   "scripts": {
