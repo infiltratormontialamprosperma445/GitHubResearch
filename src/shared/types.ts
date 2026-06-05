@@ -1,0 +1,365 @@
+export type TrendWindow = "daily" | "weekly" | "monthly" | "historical";
+
+export type PrimaryCategory =
+  | "AI"
+  | "Developer Tools"
+  | "Frontend/UI"
+  | "Backend/API"
+  | "Data/Analytics"
+  | "Security"
+  | "Infrastructure/DevOps"
+  | "Systems"
+  | "Mobile/Desktop"
+  | "Education/Awesome Lists"
+  | "Productivity"
+  | "Other";
+
+export type AiSubcategory =
+  | "Agents"
+  | "Coding Agents"
+  | "Agent Frameworks"
+  | "Skills/Plugins"
+  | "MCP/Tools"
+  | "RAG/Knowledge"
+  | "LLM Apps"
+  | "Model Serving"
+  | "Evaluation"
+  | "AI Security"
+  | "Multimodal";
+
+export type RepoStatus = "backlog" | "learning" | "learned" | "archived";
+
+export interface Repository {
+  id: string;
+  nodeId?: string;
+  fullName: string;
+  owner: string;
+  name: string;
+  description: string;
+  url: string;
+  homepage?: string;
+  stars: number;
+  forks: number;
+  openIssues: number;
+  language: string;
+  license: string;
+  topics: string[];
+  createdAt?: string;
+  pushedAt?: string;
+  readmeExcerpt?: string;
+  lastSeenAt: string;
+}
+
+export interface Classification {
+  repoId: string;
+  primaryCategory: PrimaryCategory;
+  secondaryCategory: string;
+  tags: string[];
+  confidence: number;
+  reason: string;
+  learningValue: string;
+  audience: string;
+  risks: string[];
+  evidence: string[];
+  overridden: boolean;
+  updatedAt: string;
+}
+
+export interface RankingScore {
+  repoId: string;
+  window: TrendWindow;
+  score: number;
+  growthScore: number;
+  sourceScore: number;
+  activityScore: number;
+  qualityScore: number;
+  riskPenalty: number;
+  explanation: string[];
+  sourceBreakdown: SourceBreakdown[];
+  dedupeConfidence: number;
+  anomalyReasons: string[];
+  computedAt: string;
+}
+
+export interface SourceBreakdown {
+  source: string;
+  weight: number;
+  observations: number;
+  maxGrowth: number;
+  bestRank?: number;
+}
+
+export interface SourceObservation {
+  id: string;
+  repoId: string;
+  source: string;
+  window: TrendWindow;
+  observedAt: string;
+  rank?: number;
+  stars?: number;
+  growth?: number;
+  url?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RepoSnapshot {
+  id: string;
+  repoId: string;
+  capturedAt: string;
+  window: TrendWindow;
+  stars: number;
+  forks: number;
+  openIssues: number;
+  growth: number;
+}
+
+export interface TrendRun {
+  id: string;
+  source: string;
+  window: TrendWindow;
+  startedAt: string;
+  completedAt?: string;
+  status: "running" | "success" | "failed" | "partial";
+  message?: string;
+  discoveredCount: number;
+}
+
+export interface JobStep {
+  id: string;
+  jobId: string;
+  source: string;
+  window: TrendWindow;
+  step: "discover" | "enrich" | "classify" | "score" | "snapshot" | "notify";
+  status: "pending" | "running" | "success" | "failed" | "skipped";
+  startedAt: string;
+  completedAt?: string;
+  message?: string;
+  count: number;
+}
+
+export interface RefreshJob {
+  id: string;
+  startedAt: string;
+  completedAt?: string;
+  status: "running" | "success" | "failed" | "partial";
+  windows: TrendWindow[];
+  discovered: number;
+  enriched: number;
+  classified: number;
+  scored: number;
+  warnings: string[];
+  steps: JobStep[];
+}
+
+export interface RateLimitState {
+  source: string;
+  resource: string;
+  limit?: number;
+  remaining?: number;
+  resetAt?: string;
+  observedAt: string;
+  status: "ok" | "limited" | "unknown";
+}
+
+export interface RequestCacheEntry {
+  key: string;
+  url: string;
+  method: string;
+  body: string;
+  headers: Record<string, string>;
+  createdAt: string;
+  expiresAt: string;
+  status: number;
+}
+
+export interface DataQualitySignal {
+  repoId: string;
+  kind: "dedupe" | "ranking" | "classification" | "source" | "anomaly";
+  severity: "info" | "warning" | "critical";
+  message: string;
+  createdAt: string;
+}
+
+export interface ManualClassificationRule {
+  id: string;
+  pattern: string;
+  primaryCategory: PrimaryCategory;
+  secondaryCategory: string;
+  tags: string[];
+  reason: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StarEventDaily {
+  repoId: string;
+  date: string;
+  starsAdded: number;
+  source: string;
+}
+
+export interface CollectionItem {
+  repoId: string;
+  status: RepoStatus;
+  addedAt: string;
+}
+
+export interface Note {
+  repoId: string;
+  markdown: string;
+  tags: string[];
+  status: RepoStatus;
+  updatedAt: string;
+}
+
+export interface AlertRule {
+  id: string;
+  kind: "category" | "keyword" | "repository";
+  query: string;
+  enabled: boolean;
+  createdAt: string;
+}
+
+export interface RepoRecord {
+  repo: Repository;
+  classification: Classification;
+  ranking: RankingScore;
+  observations: SourceObservation[];
+  snapshots: RepoSnapshot[];
+  collection?: CollectionItem;
+  note?: Note;
+}
+
+export interface SourceHealth {
+  id: string;
+  label: string;
+  configured: boolean;
+  enabled: boolean;
+  lastRunAt?: string;
+  status: "healthy" | "degraded" | "disabled" | "unknown";
+  message: string;
+  weight: number;
+  coverage: number;
+}
+
+export interface Settings {
+  githubToken: string;
+  bigQueryProjectId: string;
+  aiApiKey: string;
+  aiBaseUrl: string;
+  aiModel: string;
+  refreshTime: string;
+  proxyUrl: string;
+  storagePath: string;
+  startAtLogin: boolean;
+  backgroundRefresh: boolean;
+  timezone: string;
+  cacheTtlHours: number;
+  maxReposPerWindow: number;
+  enableNotifications: boolean;
+  backupPath: string;
+}
+
+export interface RepoFilters {
+  window: TrendWindow;
+  search?: string;
+  primaryCategory?: string;
+  secondaryCategory?: string;
+  language?: string;
+  minConfidence?: number;
+  collectionOnly?: boolean;
+  limit?: number;
+}
+
+export interface DashboardSummary {
+  updatedAt: string;
+  totalRepos: number;
+  totalSources: number;
+  health: SourceHealth[];
+  hotRepos: RepoRecord[];
+  categoryLeaders: Array<{
+    category: string;
+    count: number;
+    topRepo?: RepoRecord;
+  }>;
+  anomalies: RepoRecord[];
+  latestJob?: RefreshJob;
+  rateLimits: RateLimitState[];
+}
+
+export interface RefreshResult {
+  jobId: string;
+  startedAt: string;
+  completedAt: string;
+  windows: TrendWindow[];
+  discovered: number;
+  enriched: number;
+  classified: number;
+  scored: number;
+  warnings: string[];
+  steps: JobStep[];
+}
+
+export interface ClassificationOverrideInput {
+  repoId: string;
+  primaryCategory: PrimaryCategory;
+  secondaryCategory: string;
+  tags: string[];
+  reason: string;
+}
+
+export interface AppApi {
+  getDashboard(): Promise<DashboardSummary>;
+  listRepos(filters: RepoFilters): Promise<RepoRecord[]>;
+  getRepo(repoId: string): Promise<RepoRecord | undefined>;
+  refresh(window?: TrendWindow): Promise<RefreshResult>;
+  getSettings(): Promise<Settings>;
+  updateSettings(settings: Partial<Settings>): Promise<Settings>;
+  getSources(): Promise<SourceHealth[]>;
+  getLatestJob(): Promise<RefreshJob | undefined>;
+  getRateLimits(): Promise<RateLimitState[]>;
+  toggleCollection(repoId: string, status?: RepoStatus): Promise<RepoRecord | undefined>;
+  saveNote(repoId: string, markdown: string, tags: string[], status: RepoStatus): Promise<RepoRecord | undefined>;
+  saveAlert(rule: Omit<AlertRule, "id" | "createdAt">): Promise<AlertRule>;
+  overrideClassification(input: ClassificationOverrideInput): Promise<RepoRecord | undefined>;
+  exportLearningMarkdown(): Promise<string>;
+  backupData(): Promise<string>;
+  testConnection(kind: "github" | "ai"): Promise<{ ok: boolean; message: string }>;
+  openExternal(url: string): Promise<void>;
+}
+
+export const TREND_WINDOWS: Array<{ id: TrendWindow; label: string }> = [
+  { id: "daily", label: "Today" },
+  { id: "weekly", label: "Week" },
+  { id: "monthly", label: "Month" },
+  { id: "historical", label: "History" }
+];
+
+export const PRIMARY_CATEGORIES: PrimaryCategory[] = [
+  "AI",
+  "Developer Tools",
+  "Frontend/UI",
+  "Backend/API",
+  "Data/Analytics",
+  "Security",
+  "Infrastructure/DevOps",
+  "Systems",
+  "Mobile/Desktop",
+  "Education/Awesome Lists",
+  "Productivity",
+  "Other"
+];
+
+export const AI_SUBCATEGORIES: AiSubcategory[] = [
+  "Agents",
+  "Coding Agents",
+  "Agent Frameworks",
+  "Skills/Plugins",
+  "MCP/Tools",
+  "RAG/Knowledge",
+  "LLM Apps",
+  "Model Serving",
+  "Evaluation",
+  "AI Security",
+  "Multimodal"
+];

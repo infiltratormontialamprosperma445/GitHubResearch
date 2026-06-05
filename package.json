@@ -1,0 +1,102 @@
+{
+  "name": "star-intel-desk",
+  "version": "1.0.0",
+  "description": "Local-first desktop intelligence workspace for tracking trending GitHub repositories with AI classification.",
+  "main": "dist-electron/electron/main.js",
+  "scripts": {
+    "dev": "npm run build:main && concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "prepare:icons": "powershell -ExecutionPolicy Bypass -File scripts/create-windows-icon.ps1",
+    "build:main": "tsc -p tsconfig.electron.json",
+    "build": "tsc -b && npm run build:main && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "start": "npm run build && electron .",
+    "pack:win": "npm run prepare:icons && npm run build && electron-builder --win --dir",
+    "dist:win": "npm run prepare:icons && npm run build && electron-builder --win",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "github",
+    "trending",
+    "electron",
+    "intelligence",
+    "ai",
+    "telegram",
+    "twitter"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "build": {
+    "appId": "local.star-intel.desk",
+    "productName": "Star Intel Desk",
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json",
+      "node_modules/sql.js/dist/sql-wasm.wasm"
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Star Intel Desk"
+    }
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.100.14",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.16.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "sql.js": "^1.14.1",
+    "undici": "^8.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
+    "@types/sql.js": "^1.4.11",
+    "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^9.2.1",
+    "electron": "^42.2.0",
+    "electron-builder": "^26.8.1",
+    "jsdom": "^29.1.1",
+    "playwright": "^1.60.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14",
+    "vitest": "^4.1.7",
+    "wait-on": "^9.0.10"
+  }
+}

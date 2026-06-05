@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist-electron/
+release/
+output/
+*.exe
+
+# IDE & editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Coverage
+coverage/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# SQLite database
+*.sqlite
+*.db
