@@ -47,9 +47,9 @@ export class IntelligenceService {
   }
 
   async getDashboard(): Promise<DashboardSummary> {
-    const hotRepos = this.db.listRepos({ window: "daily", limit: 8 });
-    const fallbackHot = hotRepos.length ? hotRepos : this.db.listRepos({ window: "weekly", limit: 8 });
-    const allMonthly = this.db.listRepos({ window: "monthly", limit: 500 });
+    const hotRepos = this.db.listRepos({ window: "daily", limit: 8 }) ?? [];
+    const fallbackHot = hotRepos.length ? hotRepos : (this.db.listRepos({ window: "weekly", limit: 8 }) ?? []);
+    const allMonthly = this.db.listRepos({ window: "monthly", limit: 500 }) ?? [];
     const categoryLeaders = PRIMARY_CATEGORIES.map((category) => {
       const repos = allMonthly.filter((record) => record.classification.primaryCategory === category);
       return {
@@ -72,7 +72,7 @@ export class IntelligenceService {
   }
 
   async listRepos(filters: RepoFilters): Promise<RepoRecord[]> {
-    return this.db.listRepos(filters);
+    return this.db.listRepos(filters) ?? [];
   }
 
   async getRepo(repoId: string): Promise<RepoRecord | undefined> {
@@ -139,7 +139,8 @@ export class IntelligenceService {
         this.db.insertTrendRun(run);
         const discoverStep = this.startStep(job, adapter.label, trendWindow, "discover");
         try {
-          const items = await this.withRetry(() => adapter.discover(trendWindow, this.sourceSettings(settings)), 2);
+          const rawItems = await this.withRetry(() => adapter.discover(trendWindow, this.sourceSettings(settings)), 2);
+          const items = Array.isArray(rawItems) ? rawItems : [];
           this.finishStep(job, discoverStep, "success", items.length);
           const classifyStep = this.startStep(job, adapter.label, trendWindow, "classify");
           let adapterEnriched = 0;
@@ -464,7 +465,7 @@ export class IntelligenceService {
   }
 
   private applyManualRule(repo: RepoRecord["repo"]) {
-    const haystack = `${repo.fullName} ${repo.description} ${repo.topics.join(" ")}`.toLowerCase();
+    const haystack = `${repo.fullName} ${repo.description ?? ""} ${(repo.topics ?? []).join(" ")}`.toLowerCase();
     const rule = this.db.manualRules().find((candidate) => haystack.includes(candidate.pattern.toLowerCase()));
     if (!rule) return undefined;
     return {
@@ -486,7 +487,7 @@ export class IntelligenceService {
     settings: Settings
   ): void {
     if (!settings.enableNotifications || !Notification.isSupported()) return;
-    const haystack = `${repo.fullName} ${repo.description} ${repo.topics.join(" ")} ${classification.primaryCategory} ${classification.secondaryCategory}`.toLowerCase();
+    const haystack = `${repo.fullName} ${repo.description ?? ""} ${(repo.topics ?? []).join(" ")} ${classification.primaryCategory} ${classification.secondaryCategory}`.toLowerCase();
     const match = this.db.enabledAlerts().find((alert) => haystack.includes(alert.query.toLowerCase()));
     if (!match) return;
     new Notification({

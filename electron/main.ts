@@ -72,7 +72,14 @@ function registerIpc(): void {
   ipcMain.handle("dashboard:get", () => service.getDashboard());
   ipcMain.handle("repos:list", (_event, filters: RepoFilters) => service.listRepos(filters));
   ipcMain.handle("repos:get", (_event, repoId: string) => service.getRepo(repoId));
-  ipcMain.handle("refresh:run", (_event, window?: TrendWindow) => service.refresh(window));
+  ipcMain.handle("refresh:run", async (_event, window?: TrendWindow) => {
+    try {
+      return await service.refresh(window);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { jobId: "", startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), windows: [], discovered: 0, enriched: 0, classified: 0, scored: 0, warnings: [message], steps: [] };
+    }
+  });
   ipcMain.handle("settings:get", () => service.getSettings());
   ipcMain.handle("settings:update", (_event, settings: Partial<Settings>) => service.updateSettings(settings));
   ipcMain.handle("sources:get", () => service.getSources());
