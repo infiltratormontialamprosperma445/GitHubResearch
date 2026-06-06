@@ -156,6 +156,8 @@ export class IntelligenceService {
               const msg = ingestError instanceof Error ? ingestError.message : String(ingestError);
               console.warn(`[ingest] Skipping ${item.repo?.fullName ?? "unknown"}: ${msg}`);
             }
+            // Yield to event loop to prevent IPC starvation
+            await new Promise<void>((resolve) => setImmediate(resolve));
           }
           this.finishStep(job, classifyStep, "success", items.length);
           const scoreStep = this.startStep(job, adapter.label, trendWindow, "score");
@@ -221,6 +223,8 @@ export class IntelligenceService {
           warnings.push(this.redactSecrets(String(result.reason)));
         }
       }
+      // Yield to event loop between windows to prevent IPC starvation
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
 
     this.db.persist();

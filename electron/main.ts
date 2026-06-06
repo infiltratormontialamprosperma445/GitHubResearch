@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +18,18 @@ const APP_ID = "local.star-intel.desk";
 let mainWindow: BrowserWindow | undefined;
 let service: IntelligenceService;
 let autoRefreshDate = "";
+let isRefreshing = false;
+
+// Catch internal Electron/Node.js assertion errors (e.g. IPC stream AssertionError)
+// instead of crashing with a dialog
+process.on("uncaughtException", (error) => {
+  console.error("[uncaughtException]", error?.message ?? error);
+  // Log but don't crash — most of these are transient IPC stream issues
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason instanceof Error ? reason.message : String(reason));
+});
 
 if (process.platform === "win32") {
   app.setAppUserModelId(APP_ID);
@@ -69,38 +81,81 @@ function resolveWindowIcon(): string | undefined {
 }
 
 function registerIpc(): void {
-  ipcMain.handle("dashboard:get", () => service.getDashboard());
-  ipcMain.handle("repos:list", (_event, filters: RepoFilters) => service.listRepos(filters));
-  ipcMain.handle("repos:get", (_event, repoId: string) => service.getRepo(repoId));
-  ipcMain.handle("refresh:run", async (_event, window?: TrendWindow) => {
+  // Wrap handler in try/catch to prevent any unhandled errors from reaching Electron
+  const safe = <T>(handler: (...args: any[]) => Promise<T> | T) =>
+    async (...args: any[]): Promise<T | undefined> => {
+      try {
+        return await handler(...args);
+      } catch (error) {
+        console.error("[ipc error]", error instanceof Error ? error.message : String(error));
+        return undefined;
+      }
+    };
+
+  ipcMain.handle("dashboard:get", safe(() => service.getDashboard()));
+  ipcMain.handle("repos:list", safe((_event: any, filters: RepoFilters) => service.listRepos(filters)));
+  ipcMain.handle("repos:get", safe((_event: any, repoId: string) => service.getRepo(repoId)));
+
+  ipcMain.handle("refresh:run", safe(async (_event: any, window?: TrendWindow) => {
+    if (isRefreshing) {
+      return {
+        jobId: "",
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        windows: [],
+        discovered: 0,
+        enriched: 0,
+        classified: 0,
+        scored: 0,
+        warnings: ["Refresh already in progress, please wait."],
+        steps: []
+      };
+    }
+    isRefreshing = true;
     try {
-      return await service.refresh(window);
+      const result = await service.refresh(window);
+      return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return { jobId: "", startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), windows: [], discovered: 0, enriched: 0, classified: 0, scored: 0, warnings: [message], steps: [] };
+      return {
+        jobId: "",
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        windows: [],
+        discovered: 0,
+        enriched: 0,
+        classified: 0,
+        scored: 0,
+        warnings: [message],
+        steps: []
+      };
+    } finally {
+      isRefreshing = false;
     }
-  });
-  ipcMain.handle("settings:get", () => service.getSettings());
-  ipcMain.handle("settings:update", (_event, settings: Partial<Settings>) => service.updateSettings(settings));
-  ipcMain.handle("sources:get", () => service.getSources());
-  ipcMain.handle("jobs:latest", () => service.getLatestJob());
-  ipcMain.handle("rate-limits:get", () => service.getRateLimits());
-  ipcMain.handle("collection:toggle", (_event, repoId: string, status?: RepoStatus) =>
+  }));
+
+  ipcMain.handle("refresh:status", safe(() => ({ isRefreshing })));
+  ipcMain.handle("settings:get", safe(() => service.getSettings()));
+  ipcMain.handle("settings:update", safe((_event: any, settings: Partial<Settings>) => service.updateSettings(settings)));
+  ipcMain.handle("sources:get", safe(() => service.getSources()));
+  ipcMain.handle("jobs:latest", safe(() => service.getLatestJob()));
+  ipcMain.handle("rate-limits:get", safe(() => service.getRateLimits()));
+  ipcMain.handle("collection:toggle", safe((_event: any, repoId: string, status?: RepoStatus) =>
     service.toggleCollection(repoId, status)
-  );
-  ipcMain.handle("notes:save", (_event, repoId: string, markdown: string, tags: string[], status: RepoStatus) =>
+  ));
+  ipcMain.handle("notes:save", safe((_event: any, repoId: string, markdown: string, tags: string[], status: RepoStatus) =>
     service.saveNote(repoId, markdown, tags, status)
-  );
-  ipcMain.handle("alerts:save", (_event, rule) => service.saveAlert(rule));
-  ipcMain.handle("classifier:override", (_event, input: ClassificationOverrideInput) =>
+  ));
+  ipcMain.handle("alerts:save", safe((_event: any, rule: any) => service.saveAlert(rule)));
+  ipcMain.handle("classifier:override", safe((_event: any, input: ClassificationOverrideInput) =>
     service.overrideClassification(input)
-  );
-  ipcMain.handle("learning:export", () => service.exportLearningMarkdown());
-  ipcMain.handle("backup:create", () => service.backupData());
-  ipcMain.handle("connection:test", (_event, kind: "github" | "ai") => service.testConnection(kind));
-  ipcMain.handle("external:open", async (_event, url: string) => {
+  ));
+  ipcMain.handle("learning:export", safe(() => service.exportLearningMarkdown()));
+  ipcMain.handle("backup:create", safe(() => service.backupData()));
+  ipcMain.handle("connection:test", safe((_event: any, kind: "github" | "ai") => service.testConnection(kind)));
+  ipcMain.handle("external:open", safe(async (_event: any, url: string) => {
     await shell.openExternal(url);
-  });
+  }));
 }
 
 function startScheduler(): void {
@@ -110,7 +165,7 @@ function startScheduler(): void {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
     const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    if (currentTime === settings.refreshTime && autoRefreshDate !== today) {
+    if (currentTime === settings.refreshTime && autoRefreshDate !== today && !isRefreshing) {
       autoRefreshDate = today;
       await service.refresh().catch(() => undefined);
     }
