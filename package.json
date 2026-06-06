@@ -13,8 +13,9 @@
     "pack:win": "npm run prepare:icons && npm run build && electron-builder --win --dir",
     "dist:win": "npm run prepare:icons && npm run build && electron-builder --win",
     "dist:mac": "npm run build && electron-builder --mac",
+    "dist:mac:zip": "npm run build && electron-builder --mac zip --x64 --arm64",
     "dist:linux": "npm run build && electron-builder --linux",
-    "dist:all": "npm run build && electron-builder --win --mac --linux",
+    "dist:all": "npm run dist:win && npm run dist:mac:zip",
     "dist": "npm run dist:win",
     "test": "vitest run"
   },
