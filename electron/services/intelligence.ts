@@ -105,6 +105,7 @@ export class IntelligenceService {
     let classified = 0;
     let scored = 0;
 
+    // Health checks — lightweight, run in parallel
     const healthResults = await Promise.allSettled(
       this.adapters.map((adapter) =>
         adapter.health({
@@ -124,10 +125,11 @@ export class IntelligenceService {
         this.db.upsertSourceHealth(result.value);
       }
     }
+    await this.yieldEventLoop();
 
     for (const trendWindow of windows) {
-      // Run all adapters concurrently per window for better I/O throughput
-      const adapterTasks = this.adapters.map(async (adapter) => {
+      // Process adapters sequentially to avoid event loop starvation
+      for (const adapter of this.adapters) {
         const run: TrendRun = {
           id: crypto.randomUUID(),
           source: adapter.label,
@@ -142,11 +144,14 @@ export class IntelligenceService {
           const rawItems = await this.withRetry(() => adapter.discover(trendWindow, this.sourceSettings(settings)), 2);
           const items = Array.isArray(rawItems) ? rawItems : [];
           this.finishStep(job, discoverStep, "success", items.length);
+          await this.yieldEventLoop();
+
           const classifyStep = this.startStep(job, adapter.label, trendWindow, "classify");
           let adapterEnriched = 0;
           let adapterClassified = 0;
           let adapterScored = 0;
-          for (const item of items) {
+          for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+            const item = items[itemIndex];
             try {
               const counts = await this.ingest(item, trendWindow, settings);
               adapterEnriched += counts.enriched;
@@ -156,10 +161,15 @@ export class IntelligenceService {
               const msg = ingestError instanceof Error ? ingestError.message : String(ingestError);
               console.warn(`[ingest] Skipping ${item.repo?.fullName ?? "unknown"}: ${msg}`);
             }
-            // Yield to event loop to prevent IPC starvation
-            await new Promise<void>((resolve) => setImmediate(resolve));
+            // Yield every 5 items — ingest() already yields internally twice,
+            // so this outer yield gives an extra breather without excessive overhead
+            if ((itemIndex + 1) % 5 === 0) {
+              await this.yieldEventLoop();
+            }
           }
           this.finishStep(job, classifyStep, "success", items.length);
+          await this.yieldEventLoop();
+
           const scoreStep = this.startStep(job, adapter.label, trendWindow, "score");
           this.finishStep(job, scoreStep, "success", items.length);
           this.db.insertTrendRun({
@@ -181,7 +191,10 @@ export class IntelligenceService {
             })),
             lastRunAt: new Date().toISOString()
           });
-          return { discovered: items.length, enriched: adapterEnriched, classified: adapterClassified, scored: adapterScored };
+          discovered += items.length;
+          enriched += adapterEnriched;
+          classified += adapterClassified;
+          scored += adapterScored;
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           this.finishStep(job, discoverStep, "failed", 0, this.redactSecrets(message));
@@ -203,27 +216,12 @@ export class IntelligenceService {
             weight: adapter.weight,
             coverage: 0
           });
-          return { error: `${adapter.label} ${trendWindow}: ${message}` };
+          warnings.push(`${adapter.label} ${trendWindow}: ${message}`);
         }
-      });
-
-      const results = await Promise.allSettled(adapterTasks);
-      for (const result of results) {
-        if (result.status === "fulfilled" && result.value) {
-          const value = result.value;
-          if ("error" in value) {
-            warnings.push(value.error as string);
-          } else {
-            discovered += value.discovered;
-            enriched += value.enriched;
-            classified += value.classified;
-            scored += value.scored;
-          }
-        } else if (result.status === "rejected") {
-          warnings.push(this.redactSecrets(String(result.reason)));
-        }
+        // Yield between adapters
+        await this.yieldEventLoop();
       }
-      // Yield to event loop between windows to prevent IPC starvation
+      // Longer yield between windows
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
 
@@ -367,6 +365,15 @@ export class IntelligenceService {
     return { ok: result.ok, message: result.ok ? "AI endpoint connection succeeded." : `AI endpoint returned ${result.status}.` };
   }
 
+  /**
+   * Yield control back to the Electron main-process event loop so that
+   * pending IPC requests (navigation, queries, clicks) can be serviced.
+   * Uses setImmediate which fires on the next tick of the event loop.
+   */
+  private yieldEventLoop(): Promise<void> {
+    return new Promise<void>((resolve) => setImmediate(resolve));
+  }
+
   private async ingest(
     item: DiscoveredRepository,
     trendWindow: TrendWindow,
@@ -375,6 +382,7 @@ export class IntelligenceService {
     if (!item?.repo || !item.repo.fullName) {
       throw new Error(`Invalid discovered item: missing repo or fullName`);
     }
+    // --- Batch 1: core repo write ---
     const repo = this.db.canonicalizeRepository(item.repo);
     const observation = { ...(item.observation ?? {}), repoId: repo.id } as any;
     this.db.upsertRepository(repo);
@@ -390,6 +398,10 @@ export class IntelligenceService {
       growth: observation.growth ?? 0
     });
 
+    // Yield: let IPC drain between write batches
+    await this.yieldEventLoop();
+
+    // --- Batch 2: classification (may involve network I/O for AI) ---
     const existing = this.db.getClassification(repo.id);
     let classification = existing?.overridden ? existing : this.applyManualRule(repo) ?? classifyRepository(repo);
     classification = await maybeRefineClassification(repo, classification, {
@@ -398,6 +410,11 @@ export class IntelligenceService {
       aiModel: settings.aiModel
     });
     this.db.upsertClassification(classification);
+
+    // Yield: let IPC drain between write batches
+    await this.yieldEventLoop();
+
+    // --- Batch 3: ranking + notifications ---
     const observations = this.db.getObservations(repo.id).filter((sourceObservation) => sourceObservation.window === trendWindow);
     this.db.upsertRanking(scoreRepository(repo, classification, observations, trendWindow));
     this.notifyMatchingAlerts(repo, classification, settings);
