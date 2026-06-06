@@ -186,14 +186,15 @@ const GENERAL_RULES: RuleMatch[] = [
 ];
 
 export function classifyRepository(repo: Repository): Classification {
+  const topics = Array.isArray(repo.topics) ? repo.topics : [];
   const haystack = normalize(
     [
-      repo.fullName,
-      repo.description,
-      repo.language,
-      repo.license,
-      repo.readmeExcerpt,
-      repo.topics.join(" ")
+      repo.fullName ?? "",
+      repo.description ?? "",
+      repo.language ?? "",
+      repo.license ?? "",
+      repo.readmeExcerpt ?? "",
+      topics.join(" ")
     ].join(" ")
   );
 
@@ -212,7 +213,7 @@ export function classifyRepository(repo: Repository): Classification {
   const tags = unique([
     best.secondary,
     ...bestHits.map((hit) => titleTag(hit)),
-    ...repo.topics.slice(0, 4)
+    ...topics.slice(0, 4)
   ]).slice(0, 8);
 
   return {
@@ -232,7 +233,7 @@ export function classifyRepository(repo: Repository): Classification {
 }
 
 function inferByLanguage(repo: Repository): RuleMatch {
-  const language = repo.language.toLowerCase();
+  const language = (repo.language ?? "").toLowerCase();
   if (["typescript", "javascript", "css", "html"].includes(language)) {
     return { primary: "Frontend/UI", secondary: "Web Apps", keywords: [repo.language], confidence: 0.58 };
   }

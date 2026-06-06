@@ -1506,6 +1506,13 @@ h1, h2, h3, p {
   color: var(--slate-medium);
   font-size: 11px;
   font-weight: 500;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.repo-table .tag-pill {
+  font-size: 10px;
+  padding: 2px 6px;
 }
 
 .health-pill.healthy,
@@ -1578,8 +1585,9 @@ h1, h2, h3, p {
 
 .repo-table td:nth-child(2) {
   white-space: normal;
-  min-width: 180px;
-  max-width: 320px;
+  min-width: 200px;
+  max-width: 420px;
+  line-height: 1.45;
 }
 
 .repo-table th {
@@ -1594,6 +1602,7 @@ h1, h2, h3, p {
   text-transform: uppercase;
   white-space: nowrap;
   border-bottom: 1px solid var(--slate-faded-16);
+  box-shadow: 0 1px 0 var(--slate-faded-06);
 }
 
 .repo-table th:nth-child(1),
@@ -1622,9 +1631,10 @@ h1, h2, h3, p {
 .repo-table td:nth-child(6),
 .repo-table th:nth-child(7),
 .repo-table td:nth-child(7) {
-  width: 68px;
+  width: 78px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  font-size: 13px;
 }
 
 .repo-table th:nth-child(8),

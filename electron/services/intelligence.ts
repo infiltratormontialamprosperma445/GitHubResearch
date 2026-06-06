@@ -51,7 +51,7 @@ export class IntelligenceService {
     const fallbackHot = hotRepos.length ? hotRepos : (this.db.listRepos({ window: "weekly", limit: 8 }) ?? []);
     const allMonthly = this.db.listRepos({ window: "monthly", limit: 500 }) ?? [];
     const categoryLeaders = PRIMARY_CATEGORIES.map((category) => {
-      const repos = allMonthly.filter((record) => record.classification.primaryCategory === category);
+      const repos = allMonthly.filter((record) => record.classification?.primaryCategory === category);
       return {
         category,
         count: repos.length,
@@ -65,7 +65,7 @@ export class IntelligenceService {
       health: this.db.sourceHealth(),
       hotRepos: fallbackHot,
       categoryLeaders,
-      anomalies: allMonthly.filter((record) => record.ranking.riskPenalty > 0 || record.ranking.growthScore > 38).slice(0, 8),
+      anomalies: allMonthly.filter((record) => (record.ranking?.riskPenalty ?? 0) > 0 || (record.ranking?.growthScore ?? 0) > 38).slice(0, 8),
       latestJob: this.db.latestRefreshJob(),
       rateLimits: this.db.rateLimits()
     };
@@ -147,10 +147,15 @@ export class IntelligenceService {
           let adapterClassified = 0;
           let adapterScored = 0;
           for (const item of items) {
-            const counts = await this.ingest(item, trendWindow, settings);
-            adapterEnriched += counts.enriched;
-            adapterClassified += counts.classified;
-            adapterScored += counts.scored;
+            try {
+              const counts = await this.ingest(item, trendWindow, settings);
+              adapterEnriched += counts.enriched;
+              adapterClassified += counts.classified;
+              adapterScored += counts.scored;
+            } catch (ingestError) {
+              const msg = ingestError instanceof Error ? ingestError.message : String(ingestError);
+              console.warn(`[ingest] Skipping ${item.repo?.fullName ?? "unknown"}: ${msg}`);
+            }
           }
           this.finishStep(job, classifyStep, "success", items.length);
           const scoreStep = this.startStep(job, adapter.label, trendWindow, "score");
@@ -363,8 +368,11 @@ export class IntelligenceService {
     trendWindow: TrendWindow,
     settings: Settings
   ): Promise<{ enriched: number; classified: number; scored: number }> {
+    if (!item?.repo || !item.repo.fullName) {
+      throw new Error(`Invalid discovered item: missing repo or fullName`);
+    }
     const repo = this.db.canonicalizeRepository(item.repo);
-    const observation = { ...item.observation, repoId: repo.id };
+    const observation = { ...(item.observation ?? {}), repoId: repo.id } as any;
     this.db.upsertRepository(repo);
     this.db.insertObservation(observation);
     this.db.insertSnapshot({
@@ -465,7 +473,8 @@ export class IntelligenceService {
   }
 
   private applyManualRule(repo: RepoRecord["repo"]) {
-    const haystack = `${repo.fullName} ${repo.description ?? ""} ${(repo.topics ?? []).join(" ")}`.toLowerCase();
+    const topics = Array.isArray(repo.topics) ? repo.topics : [];
+    const haystack = `${repo.fullName ?? ""} ${repo.description ?? ""} ${topics.join(" ")}`.toLowerCase();
     const rule = this.db.manualRules().find((candidate) => haystack.includes(candidate.pattern.toLowerCase()));
     if (!rule) return undefined;
     return {
@@ -487,7 +496,8 @@ export class IntelligenceService {
     settings: Settings
   ): void {
     if (!settings.enableNotifications || !Notification.isSupported()) return;
-    const haystack = `${repo.fullName} ${repo.description ?? ""} ${(repo.topics ?? []).join(" ")} ${classification.primaryCategory} ${classification.secondaryCategory}`.toLowerCase();
+    const topics = Array.isArray(repo.topics) ? repo.topics : [];
+    const haystack = `${repo.fullName ?? ""} ${repo.description ?? ""} ${topics.join(" ")} ${classification?.primaryCategory ?? ""} ${classification?.secondaryCategory ?? ""}`.toLowerCase();
     const match = this.db.enabledAlerts().find((alert) => haystack.includes(alert.query.toLowerCase()));
     if (!match) return;
     new Notification({

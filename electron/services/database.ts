@@ -425,7 +425,7 @@ export class AppDatabase {
         repo.openIssues,
         repo.language,
         repo.license,
-        JSON.stringify(repo.topics),
+        JSON.stringify(Array.isArray(repo.topics) ? repo.topics : []),
         repo.createdAt ?? null,
         repo.pushedAt ?? null,
         repo.readmeExcerpt ?? null,
@@ -974,7 +974,7 @@ export class AppDatabase {
         `- URL: ${row.url}`,
         `- Category: ${row.primary_category} / ${row.secondary_category}`,
         `- Status: ${row.status}`,
-        `- Tags: ${safeJson<string[]>(row.tags, []).join(", ") || "none"}`,
+        `- Tags: ${safeJsonArray(row.tags).join(", ") || "none"}`,
         "",
         String(row.markdown || "").trim() || "_No note body._",
         ""
@@ -1018,7 +1018,7 @@ export class AppDatabase {
       record.note = {
         repoId: repo.id,
         markdown: String(row.note_markdown),
-        tags: safeJson<string[]>(row.note_tags, []),
+        tags: safeJsonArray(row.note_tags),
         status: String(row.note_status) as Note["status"],
         updatedAt: String(row.note_updated_at)
       };
@@ -1037,12 +1037,12 @@ export class AppDatabase {
       startedAt: String(row.started_at),
       completedAt: asOptional(row.completed_at),
       status: String(row.status) as RefreshJob["status"],
-      windows: safeJson<RefreshJob["windows"]>(row.windows, []),
+      windows: safeJsonArray(row.windows),
       discovered: Number(row.discovered ?? 0),
       enriched: Number(row.enriched ?? 0),
       classified: Number(row.classified ?? 0),
       scored: Number(row.scored ?? 0),
-      warnings: safeJson<string[]>(row.warnings, []),
+      warnings: safeJsonArray(row.warnings),
       steps
     };
   }
@@ -1051,6 +1051,7 @@ export class AppDatabase {
     const result = this.db.exec(sql, params);
     if (!result[0]) return [];
     const { columns, values } = result[0];
+    if (!Array.isArray(columns) || !Array.isArray(values)) return [];
     return values.map((valueRow) =>
       Object.fromEntries(columns.map((column, index) => [column, valueRow[index] ?? null]))
     ) as T[];
@@ -1458,22 +1459,22 @@ function repoFromRow(row: Row): Repository {
   return {
     id: String(row.id),
     nodeId: asOptional(row.node_id),
-    fullName: String(row.full_name),
-    owner: String(row.owner),
-    name: String(row.name),
+    fullName: String(row.full_name ?? "unknown/unknown"),
+    owner: String(row.owner ?? "unknown"),
+    name: String(row.name ?? "unknown"),
     description: String(row.description ?? ""),
-    url: String(row.url),
+    url: String(row.url ?? ""),
     homepage: asOptional(row.homepage),
     stars: Number(row.stars ?? 0),
     forks: Number(row.forks ?? 0),
     openIssues: Number(row.open_issues ?? 0),
     language: String(row.language ?? "Unknown"),
     license: String(row.license ?? "Unknown"),
-    topics: safeJson<string[]>(row.topics, []),
+    topics: safeJsonArray<string>(row.topics),
     createdAt: asOptional(row.created_at),
     pushedAt: asOptional(row.pushed_at),
     readmeExcerpt: asOptional(row.readme_excerpt),
-    lastSeenAt: String(row.last_seen_at)
+    lastSeenAt: String(row.last_seen_at ?? new Date().toISOString())
   };
 }
 
@@ -1482,13 +1483,13 @@ function classificationFromRow(row: Row): Classification {
     repoId: String(row.repo_id),
     primaryCategory: String(row.primary_category) as Classification["primaryCategory"],
     secondaryCategory: String(row.secondary_category),
-    tags: safeJson<string[]>(row.tags, []),
+    tags: safeJsonArray(row.tags),
     confidence: Number(row.confidence ?? 0),
     reason: String(row.reason ?? ""),
     learningValue: String(row.learning_value ?? ""),
     audience: String(row.audience ?? ""),
-    risks: safeJson<string[]>(row.risks, []),
-    evidence: safeJson<string[]>(row.evidence, []),
+    risks: safeJsonArray(row.risks),
+    evidence: safeJsonArray(row.evidence),
     overridden: Boolean(row.overridden),
     updatedAt: String(row.updated_at)
   };
@@ -1504,10 +1505,10 @@ function rankingFromRow(row: Row): RankingScore {
     activityScore: Number(row.activity_score ?? 0),
     qualityScore: Number(row.quality_score ?? 0),
     riskPenalty: Number(row.risk_penalty ?? 0),
-    explanation: safeJson<string[]>(row.explanation, []),
-    sourceBreakdown: safeJson<RankingScore["sourceBreakdown"]>(row.source_breakdown, []),
+    explanation: safeJsonArray(row.explanation),
+    sourceBreakdown: safeJsonArray(row.source_breakdown),
     dedupeConfidence: Number(row.dedupe_confidence ?? 0.7),
-    anomalyReasons: safeJson<string[]>(row.anomaly_reasons, []),
+    anomalyReasons: safeJsonArray(row.anomaly_reasons),
     computedAt: String(row.computed_at)
   };
 }
@@ -1600,7 +1601,7 @@ function manualRuleFromRow(row: Row): ManualClassificationRule {
     pattern: String(row.pattern),
     primaryCategory: String(row.primary_category) as ManualClassificationRule["primaryCategory"],
     secondaryCategory: String(row.secondary_category),
-    tags: safeJson<string[]>(row.tags, []),
+    tags: safeJsonArray(row.tags),
     reason: String(row.reason),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at)
@@ -1613,6 +1614,16 @@ function safeJson<T>(value: unknown, fallback: T): T {
     return JSON.parse(value) as T;
   } catch {
     return fallback;
+  }
+}
+
+function safeJsonArray<T>(value: unknown): T[] {
+  if (typeof value !== "string") return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
   }
 }
 

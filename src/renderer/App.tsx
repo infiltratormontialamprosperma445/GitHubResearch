@@ -588,11 +588,11 @@ function TrendingExplorer({ records, loading, selectedId, compareIds, onSelect, 
                   </button>
                   <small>{record.repo.description}</small>
                 </td>
-                <td><TagPill label={`${categoryLabel(record.classification.primaryCategory)} / ${subcategoryLabel(record.classification.secondaryCategory)}`} /></td>
+                <td><TagPill label={`${categoryLabel(record.classification?.primaryCategory ?? "Other")} / ${subcategoryLabel(record.classification?.secondaryCategory ?? "Unclassified")}`} /></td>
                 <td>{formatNumber(record.repo.stars, locale)}</td>
                 <td>+{formatNumber(maxGrowth(record), locale)}</td>
-                <td>{record.ranking.score.toFixed(1)}</td>
-                <td>{record.ranking.sourceBreakdown.length || new Set(record.observations.filter((item) => item.window === record.ranking.window).map((item) => item.source)).size}</td>
+                <td>{(record.ranking?.score ?? 0).toFixed(1)}</td>
+                <td>{(record.ranking?.sourceBreakdown?.length ?? 0) || new Set((record.observations ?? []).filter((item) => item.window === record.ranking?.window).map((item) => item.source)).size}</td>
                 <td>
                   <button className={clsx("mini-icon", compareIds.includes(record.repo.id) && "active")} onClick={(event) => {
                     event.stopPropagation();
