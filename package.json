@@ -42,7 +42,12 @@
     "productName": "Star Intel Desk",
     "copyright": "Copyright © 2025 zrz2004",
     "asar": true,
-    "asarUnpack": ["**/*.wasm", "**/*.node"],
+    "asarUnpack": [
+      "**/*.node",
+      "**/node_modules/better-sqlite3/**",
+      "**/node_modules/bindings/**",
+      "**/node_modules/file-uri-to-path/**"
+    ],
     "directories": {
       "buildResources": "build",
       "output": "release"
@@ -52,7 +57,18 @@
       "dist/**",
       "dist-electron/**",
       "package.json",
-      "node_modules/sql.js/dist/sql-wasm.wasm"
+      "!**/*.map",
+      "!**/node_modules/sql.js/**",
+      "!**/node_modules/.cache/**",
+      "!**/node_modules/**/test/**",
+      "!**/node_modules/**/tests/**",
+      "!**/node_modules/**/__tests__/**",
+      "!**/node_modules/**/docs/**",
+      "!**/node_modules/**/*.md",
+      "!**/node_modules/**/*.ts",
+      "!**/scripts/**",
+      "!**/docs/**",
+      "!**/.github/**"
     ],
     "extraResources": [
       {
@@ -137,18 +153,21 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.100.14",
+    "@tanstack/react-virtual": "^3.13.0",
+    "better-sqlite3": "^11.7.0",
     "clsx": "^2.1.1",
     "lucide-react": "^1.16.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "sql.js": "^1.14.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "undici": "^8.3.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
-    "@types/sql.js": "^1.4.11",
     "@vitejs/plugin-react": "^6.0.2",
     "concurrently": "^9.2.1",
     "electron": "^42.2.0",

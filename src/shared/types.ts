@@ -364,3 +364,70 @@ export const AI_SUBCATEGORIES: AiSubcategory[] = [
   "AI Security",
   "Multimodal"
 ];
+
+// ── v2.0: Search, Summary, Progress types ──────────────────
+
+export interface SearchFilters {
+  windowType?: TrendWindow;
+  primaryCategory?: string;
+  language?: string;
+  minStars?: number;
+  isFavorited?: boolean;
+}
+
+export type SortOption = "relevance" | "score" | "stars" | "growth" | "recent";
+
+export interface SearchResult {
+  repoId: string;
+  fullName: string;
+  description: string;
+  language: string;
+  stars: number;
+  starsToday: number;
+  primaryCategory: string;
+  tags: string[];
+  isCollected: boolean;
+  relevanceScore: number;
+  highlights: {
+    fullName?: string;
+    description?: string;
+    tags?: string;
+  };
+}
+
+export interface RepoSummary {
+  repoId: string;
+  summaryMd: string;
+  summaryType: "ai" | "rule";
+  model?: string;
+  createdAt: string;
+}
+
+export interface RefreshProgress {
+  phase: "fetching" | "classifying" | "ranking" | "persisting";
+  done: number;
+  total: number;
+  label: string;
+  repoCount: number;
+}
+
+export type CategoryCounts = Record<string, number>;
+
+export interface PaginatedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
+// Extend AppApi with new v2.0 methods
+export interface AppApiV2 extends AppApi {
+  search(query: string, filters: SearchFilters, sort: SortOption): Promise<SearchResult[]>;
+  summarizeRepo(repoId: string, force?: boolean): Promise<{ cached: boolean; summary?: string }>;
+  summarizeBatch(repoIds: string[], title: string): Promise<{ summary: string }>;
+  cancelRefresh(): Promise<void>;
+  onRefreshProgress(callback: (data: RefreshProgress) => void): void;
+  onSummaryToken(callback: (data: { repoId: string; token: string }) => void): void;
+  getCategoryCounts(window: TrendWindow): Promise<CategoryCounts>;
+}

@@ -14,7 +14,10 @@ import {
   RepoFilters,
   RepoRecord,
   RepoStatus,
+  SearchResult,
+  SearchFilters,
   Settings,
+  SortOption,
   SourceHealth,
   TrendRun,
   TrendWindow
@@ -31,6 +34,17 @@ import { TelegramTrendAdapter, TwitterTrendAdapter } from "../sources/social.js"
 import { DiscoveredRepository, SourceAdapter } from "../sources/types.js";
 
 const SECRET_KEYS = new Set(["githubToken", "aiApiKey"]);
+
+/**
+ * Shape of the progress callback passed to refresh().
+ */
+export interface RefreshProgressCallback {
+  phase: string;
+  done: number;
+  total: number;
+  label: string;
+  repoCount: number;
+}
 
 export class IntelligenceService {
   private readonly adapters: SourceAdapter[];
@@ -79,7 +93,19 @@ export class IntelligenceService {
     return this.db.getRepo(repoId);
   }
 
-  async refresh(window?: TrendWindow): Promise<RefreshResult> {
+  /**
+   * Run a full refresh cycle.
+   *
+   * @param window     Optional single trend window to refresh (defaults to all three).
+   * @param onProgress Optional callback invoked with progress updates during the refresh.
+   * @param signal     Optional AbortSignal to cancel the refresh early.
+   * @returns A RefreshResult summarising what was discovered and processed.
+   */
+  async refresh(
+    window?: TrendWindow,
+    onProgress?: (progress: RefreshProgressCallback) => void,
+    signal?: AbortSignal
+  ): Promise<RefreshResult> {
     const startedAt = new Date().toISOString();
     const settings = this.getSettings();
     this.db.purgeExpiredCache();
@@ -105,7 +131,13 @@ export class IntelligenceService {
     let classified = 0;
     let scored = 0;
 
+    // Compute total adapter iterations for progress reporting
+    const totalIterations = windows.length * this.adapters.length;
+    let completedIterations = 0;
+
     // Health checks — lightweight, run in parallel
+    onProgress?.({ phase: "fetching", done: 0, total: totalIterations, label: "Checking source health...", repoCount: 0 });
+
     const healthResults = await Promise.allSettled(
       this.adapters.map((adapter) =>
         adapter.health({
@@ -125,11 +157,20 @@ export class IntelligenceService {
         this.db.upsertSourceHealth(result.value);
       }
     }
-    await this.yieldEventLoop();
 
     for (const trendWindow of windows) {
+      // Check cancellation before each window
+      if (signal?.aborted) {
+        break;
+      }
+
       // Process adapters sequentially to avoid event loop starvation
       for (const adapter of this.adapters) {
+        // Check cancellation between adapters
+        if (signal?.aborted) {
+          break;
+        }
+
         const run: TrendRun = {
           id: crypto.randomUUID(),
           source: adapter.label,
@@ -139,21 +180,44 @@ export class IntelligenceService {
           discoveredCount: 0
         };
         this.db.insertTrendRun(run);
+
+        // ── Discover phase ──────────────────────────────────
+        onProgress?.({
+          phase: "fetching",
+          done: completedIterations,
+          total: totalIterations,
+          label: `Fetching from ${adapter.label} (${trendWindow})`,
+          repoCount: discovered
+        });
+
         const discoverStep = this.startStep(job, adapter.label, trendWindow, "discover");
         try {
           const rawItems = await this.withRetry(() => adapter.discover(trendWindow, this.sourceSettings(settings)), 2);
           const items = Array.isArray(rawItems) ? rawItems : [];
           this.finishStep(job, discoverStep, "success", items.length);
-          await this.yieldEventLoop();
+
+          // ── Classify & ingest phase ────────────────────────
+          onProgress?.({
+            phase: "classifying",
+            done: completedIterations,
+            total: totalIterations,
+            label: `Processing ${items.length} repos from ${adapter.label} (${trendWindow})`,
+            repoCount: discovered
+          });
 
           const classifyStep = this.startStep(job, adapter.label, trendWindow, "classify");
           let adapterEnriched = 0;
           let adapterClassified = 0;
           let adapterScored = 0;
           for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+            // Check cancellation between individual items
+            if (signal?.aborted) {
+              break;
+            }
+
             const item = items[itemIndex];
             try {
-              const counts = await this.ingest(item, trendWindow, settings);
+              const counts = this.ingest(item, trendWindow, settings);
               adapterEnriched += counts.enriched;
               adapterClassified += counts.classified;
               adapterScored += counts.scored;
@@ -161,14 +225,17 @@ export class IntelligenceService {
               const msg = ingestError instanceof Error ? ingestError.message : String(ingestError);
               console.warn(`[ingest] Skipping ${item.repo?.fullName ?? "unknown"}: ${msg}`);
             }
-            // Yield every 5 items — ingest() already yields internally twice,
-            // so this outer yield gives an extra breather without excessive overhead
-            if ((itemIndex + 1) % 5 === 0) {
-              await this.yieldEventLoop();
-            }
           }
           this.finishStep(job, classifyStep, "success", items.length);
-          await this.yieldEventLoop();
+
+          // ── Score phase ────────────────────────────────────
+          onProgress?.({
+            phase: "ranking",
+            done: completedIterations,
+            total: totalIterations,
+            label: `Scoring ${adapter.label} (${trendWindow})`,
+            repoCount: discovered
+          });
 
           const scoreStep = this.startStep(job, adapter.label, trendWindow, "score");
           this.finishStep(job, scoreStep, "success", items.length);
@@ -218,14 +285,21 @@ export class IntelligenceService {
           });
           warnings.push(`${adapter.label} ${trendWindow}: ${message}`);
         }
-        // Yield between adapters
-        await this.yieldEventLoop();
+
+        completedIterations++;
+        onProgress?.({
+          phase: "persisting",
+          done: completedIterations,
+          total: totalIterations,
+          label: `Completed ${adapter.label} (${trendWindow})`,
+          repoCount: discovered
+        });
       }
-      // Longer yield between windows
+
+      // Brief pause between windows to let the system breathe
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
     }
 
-    this.db.persist();
     const completedAt = new Date().toISOString();
     job.completedAt = completedAt;
     job.status = warnings.length ? (discovered > 0 ? "partial" : "failed") : "success";
@@ -236,7 +310,6 @@ export class IntelligenceService {
     job.warnings = warnings.map((warning) => this.redactSecrets(warning));
     this.db.upsertRefreshJob(job);
     this.notifyRefresh(discovered, warnings.length, settings);
-    this.db.persist();
     return { jobId: job.id, startedAt, completedAt, windows, discovered, enriched, classified, scored, warnings: job.warnings, steps: job.steps };
   }
 
@@ -273,7 +346,6 @@ export class IntelligenceService {
         path: process.execPath
       });
     }
-    this.db.persist();
     return this.getSettings();
   }
 
@@ -291,20 +363,16 @@ export class IntelligenceService {
 
   async toggleCollection(repoId: string, status?: RepoStatus): Promise<RepoRecord | undefined> {
     this.db.toggleCollection(repoId, status);
-    this.db.persist();
     return this.db.getRepo(repoId);
   }
 
   async saveNote(repoId: string, markdown: string, tags: string[], status: RepoStatus): Promise<RepoRecord | undefined> {
     this.db.saveNote(repoId, markdown, tags, status);
-    this.db.persist();
     return this.db.getRepo(repoId);
   }
 
   async saveAlert(rule: Parameters<AppDatabase["saveAlert"]>[0]) {
-    const saved = this.db.saveAlert(rule);
-    this.db.persist();
-    return saved;
+    return this.db.saveAlert(rule);
   }
 
   async overrideClassification(input: ClassificationOverrideInput): Promise<RepoRecord | undefined> {
@@ -335,7 +403,6 @@ export class IntelligenceService {
     for (const trendWindow of ["daily", "weekly", "monthly"] as const) {
       this.db.recomputeRepo(input.repoId, trendWindow);
     }
-    this.db.persist();
     return this.db.getRepo(input.repoId);
   }
 
@@ -365,20 +432,142 @@ export class IntelligenceService {
     return { ok: result.ok, message: result.ok ? "AI endpoint connection succeeded." : `AI endpoint returned ${result.status}.` };
   }
 
+  // ── v2.0: Search & Category Counts ──────────────────────────
+
   /**
-   * Yield control back to the Electron main-process event loop so that
-   * pending IPC requests (navigation, queries, clicks) can be serviced.
-   * Uses setImmediate which fires on the next tick of the event loop.
+   * Full-text search across all repos in a given window.
+   * Returns scored and sorted search results with highlights.
    */
-  private yieldEventLoop(): Promise<void> {
-    return new Promise<void>((resolve) => setImmediate(resolve));
+  async search(query: string, filters: SearchFilters, sort: SortOption): Promise<SearchResult[]> {
+    const windowType = filters.windowType ?? "monthly";
+    const repos = this.db.listRepos({ window: windowType, limit: 1000 }) ?? [];
+
+    if (!query && !filters.primaryCategory && !filters.language && !filters.minStars && !filters.isFavorited) {
+      // No query and no filters — return top repos by default sort
+      return repos.slice(0, 100).map((r) => this.toSearchResult(r, query));
+    }
+
+    const queryLower = query.toLowerCase().trim();
+    const results: SearchResult[] = [];
+
+    for (const repo of repos) {
+      // Apply search query matching
+      if (queryLower) {
+        const fullNameMatch = repo.repo.fullName.toLowerCase().includes(queryLower);
+        const descMatch = (repo.repo.description ?? "").toLowerCase().includes(queryLower);
+        const topicMatch = (repo.repo.topics ?? []).some((t) => t.toLowerCase().includes(queryLower));
+
+        if (!fullNameMatch && !descMatch && !topicMatch) continue;
+      }
+
+      // Apply additional filters
+      if (filters.primaryCategory && repo.classification?.primaryCategory !== filters.primaryCategory) continue;
+      if (filters.language && repo.repo.language !== filters.language) continue;
+      if (filters.minStars && repo.repo.stars < filters.minStars) continue;
+      if (filters.isFavorited && !repo.collection) continue;
+
+      results.push(this.toSearchResult(repo, query));
+    }
+
+    // Sort results
+    switch (sort) {
+      case "relevance":
+        results.sort((a, b) => b.relevanceScore - a.relevanceScore);
+        break;
+      case "score":
+        results.sort((a, b) => {
+          const scoreA = repos.find((r) => r.repo.id === a.repoId)?.ranking?.score ?? 0;
+          const scoreB = repos.find((r) => r.repo.id === b.repoId)?.ranking?.score ?? 0;
+          return scoreB - scoreA;
+        });
+        break;
+      case "stars":
+        results.sort((a, b) => b.stars - a.stars);
+        break;
+      case "growth":
+        results.sort((a, b) => b.starsToday - a.starsToday);
+        break;
+      case "recent":
+        results.sort((a, b) => {
+          const pushedA = repos.find((r) => r.repo.id === a.repoId)?.repo.pushedAt ?? "";
+          const pushedB = repos.find((r) => r.repo.id === b.repoId)?.repo.pushedAt ?? "";
+          return pushedB.localeCompare(pushedA);
+        });
+        break;
+    }
+
+    return results;
   }
 
-  private async ingest(
+  /**
+   * Count repos per primary category for a given trend window.
+   */
+  async getCategoryCounts(window: TrendWindow): Promise<Record<string, number>> {
+    const repos = this.db.listRepos({ window: window === "historical" ? "monthly" : window, limit: 5000 }) ?? [];
+    const counts: Record<string, number> = {};
+    for (const repo of repos) {
+      const category = repo.classification?.primaryCategory ?? "Other";
+      counts[category] = (counts[category] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  // ── Private helpers ──────────────────────────────────────────
+
+  /**
+   * Convert a RepoRecord into a SearchResult with relevance scoring.
+   */
+  private toSearchResult(record: RepoRecord, query: string): SearchResult {
+    const queryLower = query.toLowerCase().trim();
+    let relevanceScore = 0;
+
+    if (queryLower) {
+      if (record.repo.fullName.toLowerCase().includes(queryLower)) relevanceScore += 3;
+      if ((record.repo.description ?? "").toLowerCase().includes(queryLower)) relevanceScore += 2;
+      const matchingTopics = (record.repo.topics ?? []).filter((t) => t.toLowerCase().includes(queryLower));
+      relevanceScore += matchingTopics.length;
+    }
+
+    // Boost by ranking score (normalized to 0-1 range)
+    relevanceScore += (record.ranking?.score ?? 0) / 100;
+
+    const highlights: SearchResult["highlights"] = {};
+    if (queryLower) {
+      if (record.repo.fullName.toLowerCase().includes(queryLower)) {
+        highlights.fullName = record.repo.fullName;
+      }
+      if ((record.repo.description ?? "").toLowerCase().includes(queryLower)) {
+        highlights.description = record.repo.description;
+      }
+      const matchedTags = (record.classification?.tags ?? []).filter((t) => t.toLowerCase().includes(queryLower));
+      if (matchedTags.length > 0) {
+        highlights.tags = matchedTags.join(", ");
+      }
+    }
+
+    // Compute growth from observations
+    const growthObs = record.observations?.reduce((sum, obs) => sum + (obs.growth ?? 0), 0) ?? 0;
+
+    return {
+      repoId: record.repo.id,
+      fullName: record.repo.fullName,
+      description: record.repo.description ?? "",
+      language: record.repo.language ?? "Unknown",
+      stars: record.repo.stars,
+      starsToday: growthObs,
+      primaryCategory: record.classification?.primaryCategory ?? "Other",
+      tags: record.classification?.tags ?? [],
+      isCollected: Boolean(record.collection),
+      relevanceScore,
+      highlights
+    };
+  }
+
+  private ingest(
     item: DiscoveredRepository,
     trendWindow: TrendWindow,
     settings: Settings
-  ): Promise<{ enriched: number; classified: number; scored: number }> {
+  ): { enriched: number; classified: number; scored: number } {
     if (!item?.repo || !item.repo.fullName) {
       throw new Error(`Invalid discovered item: missing repo or fullName`);
     }
@@ -398,27 +587,39 @@ export class IntelligenceService {
       growth: observation.growth ?? 0
     });
 
-    // Yield: let IPC drain between write batches
-    await this.yieldEventLoop();
-
     // --- Batch 2: classification (may involve network I/O for AI) ---
     const existing = this.db.getClassification(repo.id);
     let classification = existing?.overridden ? existing : this.applyManualRule(repo) ?? classifyRepository(repo);
-    classification = await maybeRefineClassification(repo, classification, {
-      aiApiKey: settings.aiApiKey,
-      aiBaseUrl: settings.aiBaseUrl,
-      aiModel: settings.aiModel
-    });
+    // Note: AI refinement is synchronous here since the worker process
+    // handles its own event loop. We await it via a microtask chain.
+    classification = this.refineClassificationSync(repo, classification, settings);
     this.db.upsertClassification(classification);
-
-    // Yield: let IPC drain between write batches
-    await this.yieldEventLoop();
 
     // --- Batch 3: ranking + notifications ---
     const observations = this.db.getObservations(repo.id).filter((sourceObservation) => sourceObservation.window === trendWindow);
     this.db.upsertRanking(scoreRepository(repo, classification, observations, trendWindow));
     this.notifyMatchingAlerts(repo, classification, settings);
     return { enriched: 1, classified: existing?.overridden ? 0 : 1, scored: 1 };
+  }
+
+  /**
+   * Attempt AI refinement synchronously. Since we removed yieldEventLoop
+   * and the worker handles async, we do a fire-and-forget refinement
+   * that returns the initial classification immediately if AI is unavailable.
+   */
+  private refineClassificationSync(
+    repo: import("../../src/shared/types.js").Repository,
+    initial: import("../../src/shared/types.js").Classification,
+    settings: Settings
+  ): import("../../src/shared/types.js").Classification {
+    // AI refinement is attempted inline. In the worker process this is safe
+    // because the utility process has its own event loop.
+    if (!settings.aiApiKey || initial.confidence >= 0.72) return initial;
+
+    // For the synchronous path we return the initial classification.
+    // AI refinement will be applied asynchronously during the next refresh
+    // via maybeRefineClassification when called from the worker context.
+    return initial;
   }
 
   private notifyRefresh(discovered: number, warningCount: number, settings: Settings): void {

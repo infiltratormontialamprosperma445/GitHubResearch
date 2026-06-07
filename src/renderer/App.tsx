@@ -1,5 +1,5 @@
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
   Activity,
@@ -8,6 +8,9 @@ import {
   BookOpen,
   Boxes,
   Brain,
+  ChevronLeft,
+  ChevronRight,
+  Command,
   Database,
   Download,
   ExternalLink,
@@ -16,6 +19,7 @@ import {
   Inbox,
   LayoutDashboard,
   Loader2,
+  Moon,
   RefreshCw,
   Save,
   Search,
@@ -23,25 +27,32 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
-  Tag
+  Sun,
+  Tag,
+  X
 } from "lucide-react";
 import { api } from "./api";
+import { apiV2 } from "./api";
 import { useI18n } from "./i18n";
+import CommandPalette from "./components/CommandPalette";
+import SkeletonRow from "./components/SkeletonRow";
 import {
   AI_SUBCATEGORIES,
   PRIMARY_CATEGORIES,
-  PrimaryCategory,
-  RepoRecord,
-  RepoStatus,
-  Settings,
+  type PrimaryCategory,
+  type RefreshProgress,
+  type RepoRecord,
+  type RepoStatus,
+  type Settings,
   TREND_WINDOWS,
-  TrendWindow
+  type TrendWindow
 } from "../shared/types";
 
 type ModuleId =
   | "dashboard"
   | "explorer"
   | "categories"
+  | "collections"
   | "compare"
   | "learning"
   | "alerts"
@@ -53,17 +64,36 @@ const MODULES: Array<{ id: ModuleId; labelKey: string; icon: typeof LayoutDashbo
   { id: "dashboard", labelKey: "module.dashboard", icon: LayoutDashboard },
   { id: "explorer", labelKey: "module.explorer", icon: Sparkles },
   { id: "categories", labelKey: "module.categories", icon: Boxes },
+  { id: "collections", labelKey: "sidebar.collections", icon: Heart },
+  { id: "sources", labelKey: "module.sources", icon: Database },
   { id: "compare", labelKey: "module.compare", icon: GitCompare },
   { id: "learning", labelKey: "module.learning", icon: BookOpen },
   { id: "alerts", labelKey: "module.alerts", icon: Bell },
-  { id: "sources", labelKey: "module.sources", icon: Database },
   { id: "classifier", labelKey: "module.classifier", icon: Brain },
   { id: "settings", labelKey: "module.settings", icon: SettingsIcon }
 ];
 
+const PAGE_SIZE = 50;
+
+// ── Theme management ──────────────────────────────────────────
+
+type Theme = "dark" | "light";
+const THEME_KEY = "star-intel-theme";
+
+function getInitialTheme(): Theme {
+  try {
+    const saved = globalThis.localStorage?.getItem(THEME_KEY);
+    if (saved === "dark" || saved === "light") return saved;
+  } catch { /* ignore */ }
+  return "dark";
+}
+
+// ── Main App Component ────────────────────────────────────────
+
 export default function App() {
   const { t, locale, setLocale, categoryLabel } = useI18n();
   const queryClient = useQueryClient();
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [activeModule, setActiveModule] = useState<ModuleId>("dashboard");
   const [window, setWindow] = useState<TrendWindow>("daily");
   const [category, setCategory] = useState<string>("All");
@@ -72,8 +102,20 @@ export default function App() {
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [toast, setToast] = useState("");
   const [autoRefreshWindows, setAutoRefreshWindows] = useState<TrendWindow[]>([]);
-  const [refreshProgress, setRefreshProgress] = useState<{ current: number; total: number; label: string } | null>(null);
+  const [refreshProgress, setRefreshProgress] = useState<RefreshProgress | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [page, setPage] = useState(1);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Apply theme to document
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { globalThis.localStorage?.setItem(THEME_KEY, theme); } catch { /* ignore */ }
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => prev === "dark" ? "light" : "dark");
+  }, []);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -81,31 +123,29 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(""), 4000);
   }, []);
 
+  // ── Queries ────────────────────────────────────────────────
+
   const dashboardQuery = useQuery({
     queryKey: ["dashboard"],
     queryFn: () => api.getDashboard()
   });
 
   const reposQuery = useQuery({
-    queryKey: ["repos", window, category, search],
+    queryKey: ["repos", window, category, search, page],
     queryFn: () =>
       api.listRepos({
         window,
         search,
         primaryCategory: category,
-        limit: 260
-      })
+        limit: PAGE_SIZE
+      }),
+    placeholderData: keepPreviousData
   });
 
-  const windowReposQuery = useQuery({
-    queryKey: ["repos-summary", window, search],
-    queryFn: () =>
-      api.listRepos({
-        window,
-        search,
-        primaryCategory: "All",
-        limit: 1000
-      })
+  const categoryCountsQuery = useQuery({
+    queryKey: ["category-counts", window],
+    queryFn: () => apiV2.getCategoryCounts(window),
+    placeholderData: keepPreviousData
   });
 
   const sourcesQuery = useQuery({
@@ -123,45 +163,55 @@ export default function App() {
     queryFn: () => api.getRateLimits()
   });
 
+  // ── Refresh with real IPC progress ─────────────────────────
+
   const refreshMutation = useMutation({
     mutationFn: () => api.refresh(window === "historical" ? undefined : window),
     onMutate: () => {
-      setRefreshProgress({ current: 0, total: 4, label: "Starting refresh..." });
-      const interval = setInterval(() => {
-        setRefreshProgress((prev) => {
-          if (!prev || prev.current >= prev.total - 1) {
-            clearInterval(interval);
-            return prev;
-          }
-          const labels = ["Fetching sources...", "Analyzing trends...", "Classifying repos...", "Finalizing..."];
-          return { ...prev, current: prev.current + 1, label: labels[prev.current] ?? "Processing..." };
-        });
-      }, 1200);
-      return { interval };
+      setRefreshProgress({
+        phase: "fetching",
+        done: 0,
+        total: 100,
+        label: t("refresh.phase.fetching"),
+        repoCount: 0
+      });
     },
-    onSuccess: (result, _variables, context) => {
-      if (context?.interval) clearInterval(context.interval);
-      setRefreshProgress({ current: 4, total: 4, label: "Complete!" });
+    onSuccess: (result) => {
+      setRefreshProgress({
+        phase: "persisting",
+        done: 100,
+        total: 100,
+        label: "Complete!",
+        repoCount: result.discovered
+      });
       setTimeout(() => setRefreshProgress(null), 800);
       showToast(t("toast.refreshComplete", { discovered: result.discovered, warnings: result.warnings.length }));
       void queryClient.invalidateQueries();
     },
-    onError: (error, _variables, context) => {
-      if (context?.interval) clearInterval(context.interval);
+    onError: (error) => {
       setRefreshProgress(null);
       showToast(error instanceof Error ? error.message : t("toast.refreshFailed"));
     }
   });
 
-  const records = reposQuery.data ?? [];
-  const windowRecords = windowReposQuery.data ?? records;
-  const categoryCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const record of windowRecords) {
-      counts.set(record.classification.primaryCategory, (counts.get(record.classification.primaryCategory) ?? 0) + 1);
+  // Listen for real progress events from IPC
+  useEffect(() => {
+    const v2 = apiV2;
+    if (v2.onRefreshProgress) {
+      v2.onRefreshProgress((data: RefreshProgress) => {
+        setRefreshProgress(data);
+      });
     }
-    return counts;
-  }, [windowRecords]);
+  }, []);
+
+  // ── Derived state ──────────────────────────────────────────
+
+  const records = reposQuery.data ?? [];
+  const categoryCounts = categoryCountsQuery.data ?? {};
+  const totalWindowRepos = useMemo(() => {
+    return Object.values(categoryCounts).reduce((sum, count) => sum + count, 0);
+  }, [categoryCounts]);
+
   const selected = useMemo(
     () => records.find((record) => record.repo.id === selectedId) ?? records[0] ?? dashboardQuery.data?.hotRepos[0],
     [dashboardQuery.data?.hotRepos, records, selectedId]
@@ -171,12 +221,13 @@ export default function App() {
     if (records[0] && !records.some((record) => record.repo.id === selectedId)) setSelectedId(records[0].repo.id);
   }, [records, selectedId]);
 
+  // Auto-refresh empty windows
   useEffect(() => {
-    if (!windowReposQuery.isFetched || windowReposQuery.isFetching || search || category !== "All") return;
-    if ((windowReposQuery.data?.length ?? 0) > 0 || autoRefreshWindows.includes(window) || refreshMutation.isPending) return;
-    setAutoRefreshWindows((current) => [...current, window]);
-    refreshMutation.mutate();
-  }, [autoRefreshWindows, category, refreshMutation, search, window, windowReposQuery.data?.length, windowReposQuery.isFetched, windowReposQuery.isFetching]);
+    if (reposQuery.isFetched && records.length === 0 && !autoRefreshWindows.includes(window) && !refreshMutation.isPending && category === "All" && !search) {
+      setAutoRefreshWindows((current) => [...current, window]);
+      refreshMutation.mutate();
+    }
+  }, [autoRefreshWindows, category, refreshMutation, records.length, reposQuery.isFetched, search, window]);
 
   const invalidate = () => void queryClient.invalidateQueries();
 
@@ -184,6 +235,7 @@ export default function App() {
     setWindow(nextWindow);
     setCategory("All");
     setSelectedId("");
+    setPage(1);
     setActiveModule((current) => current === "dashboard" ? "explorer" : current);
   };
 
@@ -194,13 +246,28 @@ export default function App() {
     });
   };
 
+  // Handle repo selection from command palette
+  const handleCommandSelect = useCallback((repoId: string) => {
+    setSelectedId(repoId);
+    setActiveModule("explorer");
+  }, []);
+
+  // ── Keyboard shortcuts ─────────────────────────────────────
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Command palette: Cmd/Ctrl+K or / key
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
+        return;
+      }
       if (e.key === "/" && !e.ctrlKey && !e.metaKey && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
         e.preventDefault();
-        const searchInput = document.querySelector<HTMLInputElement>(".search-box input");
-        searchInput?.focus();
+        setCommandPaletteOpen(true);
+        return;
       }
+      // Refresh: Cmd/Ctrl+R
       if ((e.ctrlKey || e.metaKey) && e.key === "r") {
         e.preventDefault();
         refreshMutation.mutate();
@@ -210,32 +277,21 @@ export default function App() {
     return () => globalThis.removeEventListener("keydown", handleKeyDown);
   }, [refreshMutation]);
 
+  // ── Render ─────────────────────────────────────────────────
+
   return (
     <div className="app-shell">
-      <header className="topbar" style={{ WebkitAppRegion: "drag" } as CSSProperties}>
-        <div className="brand-block">
-          <div className="brand-mark">SI</div>
-          <div>
-            <h1>Star Intel Desk</h1>
-            <p>{t("app.subtitle")}</p>
-          </div>
-        </div>
-        <SegmentedWindow value={window} onChange={handleWindowChange} />
-        <div className="search-box">
-          <Search size={16} />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("search.placeholder")} />
-          <kbd className="kbd-hint">/</kbd>
-        </div>
-        <div className="topbar-actions">
-          <LanguageToggle locale={locale} onChange={setLocale} label={t("language.label")} />
-          <button className="icon-button primary" onClick={() => refreshMutation.mutate()} disabled={refreshMutation.isPending} title={t("action.refreshTitle")}>
-            <RefreshCw size={17} className={clsx(refreshMutation.isPending && "spin")} />
-            <span>{refreshMutation.isPending ? t("action.refreshing") : t("action.refresh")}</span>
-          </button>
-        </div>
-      </header>
+      {/* Custom Titlebar */}
+      <TitleBar
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+        onRefresh={() => refreshMutation.mutate()}
+        isRefreshing={refreshMutation.isPending}
+      />
 
       <div className="workspace">
+        {/* Sidebar */}
         <aside className="sidebar">
           <nav className="module-nav">
             {MODULES.map((item) => {
@@ -244,9 +300,9 @@ export default function App() {
                 <button
                   key={item.id}
                   className={clsx("module-button", activeModule === item.id && "active")}
-                  onClick={() => setActiveModule(item.id)}
+                  onClick={() => { setActiveModule(item.id); setPage(1); }}
                 >
-                  <Icon size={17} />
+                  <Icon size={16} />
                   <span>{t(item.labelKey)}</span>
                 </button>
               );
@@ -255,9 +311,9 @@ export default function App() {
 
           <div className="sidebar-section">
             <div className="section-label">{t("sidebar.categories")}</div>
-            <button className={clsx("category-button", category === "All" && "active")} onClick={() => setCategory("All")}>
+            <button className={clsx("category-button", category === "All" && "active")} onClick={() => { setCategory("All"); setPage(1); }}>
               <span>{t("common.all")}</span>
-              <small>{windowRecords.length}</small>
+              <small>{totalWindowRepos}</small>
             </button>
             {PRIMARY_CATEGORIES.map((item) => (
               <button
@@ -265,25 +321,45 @@ export default function App() {
                 className={clsx("category-button", category === item && "active")}
                 onClick={() => {
                   setCategory(item);
+                  setPage(1);
                   setActiveModule("explorer");
                 }}
               >
                 <span>{categoryLabel(item)}</span>
-                <small>{categoryCounts.get(item) ?? 0}</small>
+                <small>{categoryCounts[item] ?? 0}</small>
               </button>
             ))}
           </div>
+
+          <div className="sidebar-footer">
+            <button
+              className="module-button"
+              onClick={() => setCommandPaletteOpen(true)}
+              title={t("search.openCommand")}
+            >
+              <Command size={16} />
+              <span>{t("search.openCommand")}</span>
+              <kbd className="kbd-hint" style={{ marginLeft: "auto" }}>/</kbd>
+            </button>
+          </div>
         </aside>
 
+        {/* Main content */}
         <main className="main-surface">
-          <StatusStrip
+          <StatusBar
             updatedAt={dashboardQuery.data?.updatedAt}
             sources={sourcesQuery.data?.length ?? 0}
             storagePath={settingsQuery.data?.storagePath}
             toast={toast}
             refreshProgress={refreshProgress}
             isRefreshing={refreshMutation.isPending}
+            onCancelRefresh={() => {
+              apiV2.cancelRefresh();
+              setRefreshProgress(null);
+              showToast(t("refresh.cancelled"));
+            }}
           />
+
           {activeModule === "dashboard" && (
             <Dashboard
               records={dashboardQuery.data?.hotRepos ?? records}
@@ -296,12 +372,16 @@ export default function App() {
           {activeModule === "explorer" && (
             <TrendingExplorer
               records={records}
-              loading={reposQuery.isLoading}
+              loading={reposQuery.isFetching && !reposQuery.data}
               selectedId={selected?.repo.id}
               onSelect={(record) => setSelectedId(record.repo.id)}
               onOpenExternal={(url) => void api.openExternal(url)}
               compareIds={compareIds}
               onToggleCompare={toggleCompare}
+              window={window}
+              onWindowChange={handleWindowChange}
+              page={page}
+              setPage={setPage}
             />
           )}
           {activeModule === "categories" && (
@@ -311,8 +391,16 @@ export default function App() {
               onOpenExternal={(url) => void api.openExternal(url)}
               onOpenExplorer={(nextCategory) => {
                 setCategory(nextCategory);
+                setPage(1);
                 setActiveModule("explorer");
               }}
+            />
+          )}
+          {activeModule === "collections" && (
+            <CollectionsPanel
+              records={records}
+              onSelect={(record) => setSelectedId(record.repo.id)}
+              onOpenExternal={(url) => void api.openExternal(url)}
             />
           )}
           {activeModule === "compare" && (
@@ -338,6 +426,7 @@ export default function App() {
           )}
         </main>
 
+        {/* Detail Drawer */}
         <RepoDrawer
           record={selected}
           compareSelected={Boolean(selected && compareIds.includes(selected.repo.id))}
@@ -355,17 +444,69 @@ export default function App() {
         />
       </div>
 
+      {/* Toast */}
       {toast && (
         <div className="toast-container">
           <div className="toast-item">
-            <Sparkles size={15} />
+            <Sparkles size={14} />
             <span>{toast}</span>
           </div>
         </div>
       )}
+
+      {/* Command Palette */}
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onSelect={handleCommandSelect}
+      />
     </div>
   );
 }
+
+// ── TitleBar Component ────────────────────────────────────────
+
+function TitleBar({ theme, onToggleTheme, onOpenCommandPalette, onRefresh, isRefreshing }: {
+  theme: Theme;
+  onToggleTheme: () => void;
+  onOpenCommandPalette: () => void;
+  onRefresh: () => void;
+  isRefreshing: boolean;
+}) {
+  const { t, locale, setLocale } = useI18n();
+  return (
+    <header className="titlebar" style={{ WebkitAppRegion: "drag" } as CSSProperties}>
+      <div className="titlebar-left">
+        <div className="titlebar-brand">
+          <div className="titlebar-logo">SI</div>
+          <span className="titlebar-title">Star Intel Desk</span>
+        </div>
+        <span className="titlebar-subtitle">{t("app.subtitle")}</span>
+      </div>
+      <div className="titlebar-actions">
+        <button className="btn btn--ghost btn--xs" onClick={onOpenCommandPalette} title={t("search.openCommand")}>
+          <Search size={14} />
+          <kbd className="kbd-hint" style={{ fontSize: 9, height: 16, minWidth: 14, padding: "0 3px" }}>/</kbd>
+        </button>
+        <LanguageToggle locale={locale} onChange={setLocale} label={t("language.label")} />
+        <button className="btn btn--ghost btn--xs" onClick={onToggleTheme} title={t("action.theme")}>
+          {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+        </button>
+        <button
+          className="btn btn--solid btn--xs"
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          title={t("action.refreshTitle")}
+        >
+          <RefreshCw size={13} className={clsx(isRefreshing && "spin")} />
+          <span>{isRefreshing ? t("action.refreshing") : t("action.refresh")}</span>
+        </button>
+      </div>
+    </header>
+  );
+}
+
+// ── Segmented Window ─────────────────────────────────────────
 
 function SegmentedWindow({ value, onChange }: { value: TrendWindow; onChange: (value: TrendWindow) => void }) {
   const { windowLabel } = useI18n();
@@ -380,6 +521,8 @@ function SegmentedWindow({ value, onChange }: { value: TrendWindow; onChange: (v
   );
 }
 
+// ── Language Toggle ───────────────────────────────────────────
+
 function LanguageToggle({ locale, onChange, label }: { locale: "en" | "zh"; onChange: (locale: "en" | "zh") => void; label: string }) {
   return (
     <div className="language-toggle" aria-label={label}>
@@ -389,36 +532,44 @@ function LanguageToggle({ locale, onChange, label }: { locale: "en" | "zh"; onCh
   );
 }
 
-function StatusStrip({ updatedAt, sources, storagePath, toast, refreshProgress, isRefreshing }: {
+// ── Status Bar ────────────────────────────────────────────────
+
+function StatusBar({ updatedAt, sources, storagePath, toast, refreshProgress, isRefreshing, onCancelRefresh }: {
   updatedAt?: string;
   sources: number;
   storagePath?: string;
   toast: string;
-  refreshProgress: { current: number; total: number; label: string } | null;
+  refreshProgress: RefreshProgress | null;
   isRefreshing: boolean;
+  onCancelRefresh: () => void;
 }) {
   const { t, locale } = useI18n();
   return (
-    <div className="status-strip">
+    <div className="status-bar">
       {isRefreshing && refreshProgress ? (
         <div className="refresh-progress">
-          <Loader2 size={14} className="spin" />
+          <Loader2 size={13} className="spin" />
           <div className="progress-track">
-            <div className="progress-fill" style={{ width: `${(refreshProgress.current / refreshProgress.total) * 100}%` }} />
+            <div className="progress-fill" style={{ width: `${(refreshProgress.done / Math.max(refreshProgress.total, 1)) * 100}%` }} />
           </div>
           <span className="progress-label">{refreshProgress.label}</span>
+          <button className="btn btn--ghost btn--xs" onClick={onCancelRefresh} title={t("refresh.cancel")}>
+            <X size={12} />
+          </button>
         </div>
       ) : (
         <>
-          <span><Activity size={14} /> {t("status.lastUpdate", { value: updatedAt ? timeAgo(updatedAt, locale, t) : t("common.pending") })}</span>
-          <span><Database size={14} /> {t("common.sources", { count: sources })}</span>
-          <span className="truncate"><ShieldCheck size={14} /> {storagePath ?? t("common.localSQLite")}</span>
+          <span><Activity size={13} /> {t("status.lastUpdate", { value: updatedAt ? timeAgo(updatedAt, locale, t) : t("common.pending") })}</span>
+          <span><Database size={13} /> {t("common.sources", { count: sources })}</span>
+          <span className="truncate"><ShieldCheck size={13} /> {storagePath ?? t("common.localSQLite")}</span>
         </>
       )}
       {toast && <strong>{toast}</strong>}
     </div>
   );
 }
+
+// ── Dashboard ─────────────────────────────────────────────────
 
 function Dashboard({ records, summary, onSelect, onOpenExternal, onModule }: {
   records: RepoRecord[];
@@ -451,10 +602,10 @@ function Dashboard({ records, summary, onSelect, onOpenExternal, onModule }: {
           <p>{t("dashboard.readyBody")}</p>
           <div className="quick-actions">
             <button className="quick-action-btn" onClick={() => onModule("sources")}>
-              <Database size={15} /> {t("module.sources")}
+              <Database size={14} /> {t("module.sources")}
             </button>
             <button className="quick-action-btn" onClick={() => onModule("settings")}>
-              <SettingsIcon size={15} /> {t("module.settings")}
+              <SettingsIcon size={14} /> {t("module.settings")}
             </button>
           </div>
         </div>
@@ -471,13 +622,13 @@ function Dashboard({ records, summary, onSelect, onOpenExternal, onModule }: {
           <p>{top?.repo.description ?? t("dashboard.readyBody")}</p>
           <div className="quick-actions">
             <button className="quick-action-btn" onClick={() => onModule("explorer")}>
-              <Sparkles size={15} /> {t("module.explorer")}
+              <Sparkles size={14} /> {t("module.explorer")}
             </button>
             <button className="quick-action-btn" onClick={() => onModule("categories")}>
-              <Boxes size={15} /> {t("module.categories")}
+              <Boxes size={14} /> {t("module.categories")}
             </button>
             <button className="quick-action-btn" onClick={() => onModule("compare")}>
-              <GitCompare size={15} /> {t("module.compare")}
+              <GitCompare size={14} /> {t("module.compare")}
             </button>
           </div>
         </div>
@@ -530,7 +681,9 @@ function Dashboard({ records, summary, onSelect, onOpenExternal, onModule }: {
   );
 }
 
-function TrendingExplorer({ records, loading, selectedId, compareIds, onSelect, onOpenExternal, onToggleCompare }: {
+// ── Trending Explorer ─────────────────────────────────────────
+
+function TrendingExplorer({ records, loading, selectedId, compareIds, onSelect, onOpenExternal, onToggleCompare, window, onWindowChange, page, setPage }: {
   records: RepoRecord[];
   loading: boolean;
   selectedId?: string;
@@ -538,11 +691,23 @@ function TrendingExplorer({ records, loading, selectedId, compareIds, onSelect, 
   onSelect: (record: RepoRecord) => void;
   onOpenExternal: (url: string) => void;
   onToggleCompare: (repoId: string) => void;
+  window: TrendWindow;
+  onWindowChange: (w: TrendWindow) => void;
+  page: number;
+  setPage: (page: number) => void;
 }) {
   const { t, locale, categoryLabel, subcategoryLabel } = useI18n();
+  const totalPages = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
+  const pagedRecords = records.slice(0, PAGE_SIZE);
+
   return (
     <section className="panel full">
-      <PanelHeader title={t("explorer.title")} meta={t("common.repositories", { count: records.length })} />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+        <div>
+          <PanelHeader title={t("explorer.title")} meta={t("common.repositories", { count: records.length })} />
+        </div>
+        <SegmentedWindow value={window} onChange={onWindowChange} />
+      </div>
       <div className="table-wrap">
         <table className="repo-table">
           <thead>
@@ -557,58 +722,69 @@ function TrendingExplorer({ records, loading, selectedId, compareIds, onSelect, 
               <th>{t("table.compare")}</th>
             </tr>
           </thead>
-          <tbody>
-            {loading && (
-              <tr><td colSpan={8}>
-                <div className="empty-state">
-                  <Loader2 size={28} className="spin" />
-                  <p>{t("explorer.loading")}</p>
-                </div>
-              </td></tr>
-            )}
-            {!loading && records.length === 0 && (
-              <tr><td colSpan={8}>
-                <div className="empty-state">
-                  <Search size={32} />
-                  <h3>{t("explorer.title")}</h3>
-                  <p>{t("search.placeholder")}</p>
-                </div>
-              </td></tr>
-            )}
-            {records.map((record, index) => (
-              <tr key={record.repo.id} className={clsx(selectedId === record.repo.id && "selected")} onClick={() => onSelect(record)}>
-                <td>{index + 1}</td>
-                <td>
-                  <button className="repo-link" onClick={(event) => {
-                    event.stopPropagation();
-                    onOpenExternal(record.repo.url);
-                  }} title={t("action.openGithub")}>
-                    <strong>{record.repo.fullName}</strong>
-                    <ExternalLink size={13} />
-                  </button>
-                  <small>{record.repo.description}</small>
-                </td>
-                <td><TagPill label={`${categoryLabel(record.classification?.primaryCategory ?? "Other")} / ${subcategoryLabel(record.classification?.secondaryCategory ?? "Unclassified")}`} /></td>
-                <td>{formatNumber(record.repo.stars, locale)}</td>
-                <td>+{formatNumber(maxGrowth(record), locale)}</td>
-                <td>{(record.ranking?.score ?? 0).toFixed(1)}</td>
-                <td>{(record.ranking?.sourceBreakdown?.length ?? 0) || new Set((record.observations ?? []).filter((item) => item.window === record.ranking?.window).map((item) => item.source)).size}</td>
-                <td>
-                  <button className={clsx("mini-icon", compareIds.includes(record.repo.id) && "active")} onClick={(event) => {
-                    event.stopPropagation();
-                    onToggleCompare(record.repo.id);
-                  }} title={t("action.addToCompare")}>
-                    <GitCompare size={15} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
+          {loading ? (
+            <SkeletonRow />
+          ) : (
+            <tbody>
+              {!loading && pagedRecords.length === 0 && (
+                <tr><td colSpan={8}>
+                  <div className="empty-state">
+                    <Search size={32} />
+                    <h3>{t("explorer.title")}</h3>
+                    <p>{t("search.placeholder")}</p>
+                  </div>
+                </td></tr>
+              )}
+              {pagedRecords.map((record, index) => (
+                <tr key={record.repo.id} className={clsx(selectedId === record.repo.id && "selected")} onClick={() => onSelect(record)}>
+                  <td>{(page - 1) * PAGE_SIZE + index + 1}</td>
+                  <td>
+                    <button className="repo-link" onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenExternal(record.repo.url);
+                    }} title={t("action.openGithub")}>
+                      <strong>{record.repo.fullName}</strong>
+                      <ExternalLink size={12} />
+                    </button>
+                    <small>{record.repo.description}</small>
+                  </td>
+                  <td><TagPill label={`${categoryLabel(record.classification?.primaryCategory ?? "Other")} / ${subcategoryLabel(record.classification?.secondaryCategory ?? "Unclassified")}`} /></td>
+                  <td>{formatNumber(record.repo.stars, locale)}</td>
+                  <td>+{formatNumber(maxGrowth(record), locale)}</td>
+                  <td>{(record.ranking?.score ?? 0).toFixed(1)}</td>
+                  <td>{(record.ranking?.sourceBreakdown?.length ?? 0) || new Set((record.observations ?? []).filter((item) => item.window === record.ranking?.window).map((item) => item.source)).size}</td>
+                  <td>
+                    <button className={clsx("mini-icon", compareIds.includes(record.repo.id) && "active")} onClick={(event) => {
+                      event.stopPropagation();
+                      onToggleCompare(record.repo.id);
+                    }} title={t("action.addToCompare")}>
+                      <GitCompare size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          )}
         </table>
       </div>
+      {/* Pagination */}
+      {records.length > PAGE_SIZE && (
+        <div className="pagination">
+          <button disabled={page <= 1} onClick={() => setPage(page - 1)}>
+            <ChevronLeft size={14} /> {t("pagination.prev")}
+          </button>
+          <span>{t("pagination.page", { page })}</span>
+          <button disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+            {t("pagination.next")} <ChevronRight size={14} />
+          </button>
+        </div>
+      )}
     </section>
   );
 }
+
+
+// ── Category Intelligence ─────────────────────────────────────
 
 function CategoryIntelligence({ records, onSelect, onOpenExternal, onOpenExplorer }: {
   records: RepoRecord[];
@@ -617,9 +793,9 @@ function CategoryIntelligence({ records, onSelect, onOpenExternal, onOpenExplore
   onOpenExplorer: (category: string) => void;
 }) {
   const { t, categoryLabel, subcategoryLabel } = useI18n();
-  const groups = PRIMARY_CATEGORIES.map((category) => {
-    const items = records.filter((record) => record.classification.primaryCategory === category);
-    return { category, items, top: items[0] };
+  const groups = PRIMARY_CATEGORIES.map((cat) => {
+    const items = records.filter((record) => record.classification.primaryCategory === cat);
+    return { category: cat, items, top: items[0] };
   }).filter((group) => group.items.length);
   const aiBreakdown = AI_SUBCATEGORIES.map((subcategory) => ({
     subcategory,
@@ -659,6 +835,34 @@ function CategoryIntelligence({ records, onSelect, onOpenExternal, onOpenExplore
   );
 }
 
+// ── Collections Panel ─────────────────────────────────────────
+
+function CollectionsPanel({ records, onSelect, onOpenExternal }: {
+  records: RepoRecord[];
+  onSelect: (record: RepoRecord) => void;
+  onOpenExternal: (url: string) => void;
+}) {
+  const { t } = useI18n();
+  const collected = records.filter((record) => record.collection || record.note);
+
+  return (
+    <section className="panel full">
+      <PanelHeader title={t("sidebar.collections")} meta={t("common.saved", { count: collected.length })} />
+      {collected.length > 0 ? (
+        <RepoList records={collected} onSelect={onSelect} onOpenExternal={onOpenExternal} />
+      ) : (
+        <div className="empty-state">
+          <Heart size={36} style={{ opacity: 0.4 }} />
+          <h3>{t("sidebar.collections")}</h3>
+          <p>{t("drawer.notePlaceholder")}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ── Compare ───────────────────────────────────────────────────
+
 function Compare({ records, compareIds, onToggleCompare, onSelect, onOpenExternal }: {
   records: RepoRecord[];
   compareIds: string[];
@@ -679,13 +883,13 @@ function Compare({ records, compareIds, onToggleCompare, onSelect, onOpenExterna
             <button className="mini-icon corner" onClick={(event) => {
               event.stopPropagation();
               onToggleCompare(record.repo.id);
-            }}><GitCompare size={15} /></button>
+            }}><GitCompare size={14} /></button>
             <button className="repo-link" onClick={(event) => {
               event.stopPropagation();
               onOpenExternal(record.repo.url);
             }} title={t("action.openGithub")}>
               <h3>{record.repo.name}</h3>
-              <ExternalLink size={13} />
+              <ExternalLink size={12} />
             </button>
             <p>{record.repo.owner}</p>
             <MetricLine label={t("metric.stars")} value={formatNumber(record.repo.stars, locale)} />
@@ -701,6 +905,8 @@ function Compare({ records, compareIds, onToggleCompare, onSelect, onOpenExterna
   );
 }
 
+// ── Learning Hub ──────────────────────────────────────────────
+
 function LearningHub({ records, onSelect, onOpenExternal, onExport }: { records: RepoRecord[]; onSelect: (record: RepoRecord) => void; onOpenExternal: (url: string) => void; onExport: () => void }) {
   const { t } = useI18n();
   const saved = records.filter((record) => record.collection || record.note);
@@ -711,6 +917,8 @@ function LearningHub({ records, onSelect, onOpenExternal, onExport }: { records:
     </section>
   );
 }
+
+// ── Alerts ────────────────────────────────────────────────────
 
 function Alerts({ onSaved }: { onSaved: () => void }) {
   const { t } = useI18n();
@@ -731,11 +939,13 @@ function Alerts({ onSaved }: { onSaved: () => void }) {
         await api.saveAlert({ kind, query, enabled: true });
         onSaved();
       }}>
-        <Bell size={16} /> {t("action.saveAlert")}
+        <Bell size={15} /> {t("action.saveAlert")}
       </button>
     </section>
   );
 }
+
+// ── Data Sources ──────────────────────────────────────────────
 
 function DataSources({ sources, rateLimits }: {
   sources: Awaited<ReturnType<typeof api.getSources>>;
@@ -750,7 +960,7 @@ function DataSources({ sources, rateLimits }: {
           return (
             <article key={source.id} className="panel source-card">
               <div className="source-card-head">
-                <Database size={18} />
+                <Database size={16} />
                 <strong>{source.label}</strong>
                 <span className={clsx("health-dot", source.status)} />
               </div>
@@ -773,6 +983,8 @@ function DataSources({ sources, rateLimits }: {
   );
 }
 
+// ── Classifier Lab ────────────────────────────────────────────
+
 function ClassifierLab({ record, onSaved }: { record: RepoRecord; onSaved: () => void }) {
   const { t, categoryLabel } = useI18n();
   const [primary, setPrimary] = useState<PrimaryCategory>(record.classification.primaryCategory);
@@ -793,7 +1005,7 @@ function ClassifierLab({ record, onSaved }: { record: RepoRecord; onSaved: () =>
       <div className="classifier-layout">
         <div>
           <h3>{t("classifier.evidence")}</h3>
-          <p>{record.repo.description}</p>
+          <p style={{ color: "var(--text-secondary)", fontSize: 13, lineHeight: 1.55 }}>{record.repo.description}</p>
           <div className="tag-row">{record.repo.topics.map((topic) => <TagPill key={topic} label={topic} />)}</div>
           <ul className="evidence-list">
             {record.classification.evidence.map((item) => <li key={item}>{item}</li>)}
@@ -820,12 +1032,14 @@ function ClassifierLab({ record, onSaved }: { record: RepoRecord; onSaved: () =>
           <input value={tags} onChange={(event) => setTags(event.target.value)} />
           <label>{t("classifier.reason")}</label>
           <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={5} />
-          <button className="icon-button primary"><Save size={16} /> {t("action.saveOverride")}</button>
+          <button className="icon-button primary"><Save size={15} /> {t("action.saveOverride")}</button>
         </form>
       </div>
     </section>
   );
 }
+
+// ── Settings Panel ────────────────────────────────────────────
 
 function SettingsPanel({ settings, onSaved }: { settings: Settings; onSaved: (settings: Settings) => void }) {
   const { t } = useI18n();
@@ -862,27 +1076,29 @@ function SettingsPanel({ settings, onSaved }: { settings: Settings; onSaved: (se
           const result = await api.testConnection("github");
           setConnectionMessage(result.message);
         }}>
-          <ShieldCheck size={16} /> {t("action.testGithub")}
+          <ShieldCheck size={15} /> {t("action.testGithub")}
         </button>
         <button className="icon-button" type="button" onClick={async () => {
           const result = await api.testConnection("ai");
           setConnectionMessage(result.message);
         }}>
-          <Brain size={16} /> {t("action.testAi")}
+          <Brain size={15} /> {t("action.testAi")}
         </button>
         <button className="icon-button" type="button" onClick={async () => {
           const path = await api.backupData();
           setConnectionMessage(t("toast.backupCreated", { path }));
         }}>
-          <Download size={16} /> {t("action.backupData")}
+          <Download size={15} /> {t("action.backupData")}
         </button>
       </div>
       <button className="icon-button primary" onClick={async () => onSaved(await api.updateSettings(form))}>
-        <Save size={16} /> {t("action.saveSettings")}
+        <Save size={15} /> {t("action.saveSettings")}
       </button>
     </section>
   );
 }
+
+// ── Repo Drawer ───────────────────────────────────────────────
 
 function RepoDrawer({ record, compareSelected, onOpenExternal, onToggleCollection, onToggleCompare, onSaveNote }: {
   record?: RepoRecord;
@@ -911,15 +1127,15 @@ function RepoDrawer({ record, compareSelected, onOpenExternal, onToggleCollectio
           <p>{t("drawer.notePlaceholder")}</p>
           <div style={{ display: "flex", gap: "4px", marginTop: "8px", alignItems: "center" }}>
             <kbd className="kbd-hint">Click</kbd>
-            <span style={{ color: "var(--slate-light)", fontSize: "12px" }}>a row to inspect</span>
+            <span style={{ color: "var(--text-muted)", fontSize: "11px" }}>a row to inspect</span>
           </div>
           <div style={{ display: "flex", gap: "4px", marginTop: "4px", alignItems: "center" }}>
             <kbd className="kbd-hint">/</kbd>
-            <span style={{ color: "var(--slate-light)", fontSize: "12px" }}>to search</span>
+            <span style={{ color: "var(--text-muted)", fontSize: "11px" }}>to search</span>
           </div>
           <div style={{ display: "flex", gap: "4px", marginTop: "4px", alignItems: "center" }}>
             <kbd className="kbd-hint">Ctrl+R</kbd>
-            <span style={{ color: "var(--slate-light)", fontSize: "12px" }}>to refresh</span>
+            <span style={{ color: "var(--text-muted)", fontSize: "11px" }}>to refresh</span>
           </div>
         </div>
       </aside>
@@ -934,15 +1150,15 @@ function RepoDrawer({ record, compareSelected, onOpenExternal, onToggleCollectio
           <h2>{record.repo.name}</h2>
           <span>{record.repo.owner}</span>
         </div>
-        <button className="mini-icon" onClick={() => onOpenExternal(record.repo.url)} title={t("action.openGithub")}><ExternalLink size={16} /></button>
+        <button className="mini-icon" onClick={() => onOpenExternal(record.repo.url)} title={t("action.openGithub")}><ExternalLink size={15} /></button>
       </div>
       <p className="drawer-description">{record.repo.description}</p>
       <div className="drawer-actions">
         <button className={clsx("icon-button", record.collection && "active")} onClick={() => onToggleCollection(record.repo.id)}>
-          <Heart size={16} /> {t("action.save")}
+          <Heart size={15} /> {t("action.save")}
         </button>
         <button className={clsx("icon-button", compareSelected && "active")} onClick={() => onToggleCompare(record.repo.id)}>
-          <GitCompare size={16} /> {t("action.compare")}
+          <GitCompare size={15} /> {t("action.compare")}
         </button>
       </div>
 
@@ -963,7 +1179,7 @@ function RepoDrawer({ record, compareSelected, onOpenExternal, onToggleCollectio
       <div className="drawer-block">
         <h3>{t("drawer.classification")}</h3>
         <TagPill label={`${categoryLabel(record.classification.primaryCategory)} / ${subcategoryLabel(record.classification.secondaryCategory)}`} />
-        <p>{record.classification.reason}</p>
+        <p style={{ marginTop: 6 }}>{record.classification.reason}</p>
         <div className="tag-row">{record.classification.tags.map((tag) => <TagPill key={tag} label={tag} />)}</div>
       </div>
 
@@ -978,12 +1194,14 @@ function RepoDrawer({ record, compareSelected, onOpenExternal, onToggleCollectio
           <option value="archived">{statusLabel("archived")}</option>
         </select>
         <button className="icon-button primary" onClick={() => onSaveNote(record.repo.id, note, noteTags.split(",").map((tag) => tag.trim()).filter(Boolean), status)}>
-          <Save size={16} /> {t("action.saveNote")}
+          <Save size={15} /> {t("action.saveNote")}
         </button>
       </div>
     </aside>
   );
 }
+
+// ── Repo List ─────────────────────────────────────────────────
 
 function RepoList({ records, onSelect, onOpenExternal }: { records: RepoRecord[]; onSelect: (record: RepoRecord) => void; onOpenExternal: (url: string) => void }) {
   const { t } = useI18n();
@@ -1006,7 +1224,7 @@ function RepoList({ records, onSelect, onOpenExternal }: { records: RepoRecord[]
               onOpenExternal(record.repo.url);
             }} title={t("action.openGithub")}>
               <strong>{record.repo.fullName}</strong>
-              <ExternalLink size={13} />
+              <ExternalLink size={12} />
             </button>
             <small>{record.repo.description}</small>
           </div>
@@ -1017,11 +1235,13 @@ function RepoList({ records, onSelect, onOpenExternal }: { records: RepoRecord[]
   );
 }
 
+// ── Small Helper Components ───────────────────────────────────
+
 function Metric({ label, value, icon: Icon }: { label: string; value: number; icon: typeof Star }) {
   const { locale } = useI18n();
   return (
     <div className="metric-card">
-      <Icon size={18} />
+      <Icon size={17} />
       <strong>{formatNumber(value, locale)}</strong>
       <span>{label}</span>
     </div>
@@ -1035,7 +1255,7 @@ function PanelHeader({ title, meta, action, onAction }: { title: string; meta?: 
         <h2>{title}</h2>
         {meta && <span>{meta}</span>}
       </div>
-      {action && <button className="text-action" onClick={onAction}>{action} <ExternalLink size={14} /></button>}
+      {action && <button className="text-action" onClick={onAction}>{action} <ExternalLink size={13} /></button>}
     </div>
   );
 }
@@ -1045,7 +1265,7 @@ function MetricLine({ label, value }: { label: string; value: string }) {
 }
 
 function TagPill({ label }: { label: string }) {
-  return <span className="tag-pill"><Tag size={12} /> {label}</span>;
+  return <span className="tag-pill"><Tag size={11} /> {label}</span>;
 }
 
 function Sparkline({ record }: { record: RepoRecord }) {
@@ -1060,6 +1280,8 @@ function Sparkline({ record }: { record: RepoRecord }) {
     </svg>
   );
 }
+
+// ── Utility Functions ─────────────────────────────────────────
 
 function maxGrowth(record: RepoRecord): number {
   const rankingGrowth = record.ranking.sourceBreakdown.map((item) => item.maxGrowth);

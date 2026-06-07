@@ -11,6 +11,31 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    emptyOutDir: true
+    emptyOutDir: true,
+    minify: true,
+    target: "chrome120",
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes("node_modules/react-dom") || id.includes("node_modules/react/")) {
+            return "react-core";
+          }
+          if (id.includes("@tanstack/react-query")) {
+            return "query";
+          }
+          if (id.includes("react-markdown") || id.includes("remark-gfm")) {
+            return "markdown";
+          }
+          if (id.includes("@tanstack/react-virtual")) {
+            return "virtual";
+          }
+          if (id.includes("lucide-react")) {
+            return "ui-icons";
+          }
+        }
+      }
+    },
+    chunkSizeWarningLimit: 800
   }
 });

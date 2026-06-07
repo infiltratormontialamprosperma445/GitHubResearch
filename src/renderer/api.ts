@@ -2,10 +2,16 @@ import { classifyRepository } from "../shared/classifier";
 import { scoreRepository } from "../shared/ranking";
 import {
   AppApi,
+  AppApiV2,
+  CategoryCounts,
   DashboardSummary,
+  RefreshProgress,
   RepoRecord,
   Repository,
+  SearchFilters,
+  SearchResult,
   Settings,
+  SortOption,
   SourceObservation,
   TrendWindow
 } from "../shared/types";
@@ -217,5 +223,69 @@ export const api: AppApi = window.githubIntel ?? {
   },
   async openExternal(url) {
     window.open(url, "_blank", "noopener,noreferrer");
+  }
+} as AppApi;
+
+// v2 extended API with fallback implementations
+export const apiV2: AppApiV2 = (window.githubIntel as AppApiV2 | undefined) ?? {
+  ...api,
+  async search(_query: string, _filters: SearchFilters, _sort: SortOption): Promise<SearchResult[]> {
+    // Fallback: filter fallbackRecords by query text
+    const q = _query.toLowerCase();
+    return fallbackRecords
+      .filter((record) => {
+        if (!q) return true;
+        return (
+          record.repo.fullName.toLowerCase().includes(q) ||
+          record.repo.description.toLowerCase().includes(q) ||
+          record.repo.topics.some((topic) => topic.toLowerCase().includes(q))
+        );
+      })
+      .map((record, index) => ({
+        repoId: record.repo.id,
+        fullName: record.repo.fullName,
+        description: record.repo.description,
+        language: record.repo.language,
+        stars: record.repo.stars,
+        starsToday: record.observations[0]?.growth ?? 0,
+        primaryCategory: record.classification.primaryCategory,
+        tags: record.classification.tags,
+        isCollected: Boolean(record.collection),
+        relevanceScore: 1 - index * 0.1,
+        highlights: {}
+      }));
+  },
+  async summarizeRepo(repoId: string, _force?: boolean): Promise<{ cached: boolean; summary?: string }> {
+    const record = fallbackRecords.find((item) => item.repo.id === repoId);
+    if (!record) return { cached: false, summary: undefined };
+    const summary = `## ${record.repo.fullName}\n\n${record.repo.description}\n\n- **Stars**: ${record.repo.stars.toLocaleString()}\n- **Language**: ${record.repo.language}\n- **Category**: ${record.classification.primaryCategory}\n- **Score**: ${record.ranking.score.toFixed(1)}`;
+    return { cached: false, summary };
+  },
+  async summarizeBatch(repoIds: string[], title: string): Promise<{ summary: string }> {
+    const lines = [`# ${title}\n`];
+    for (const id of repoIds) {
+      const record = fallbackRecords.find((item) => item.repo.id === id);
+      if (record) {
+        lines.push(`- **${record.repo.fullName}**: ${record.repo.description} (${record.repo.stars.toLocaleString()} stars)`);
+      }
+    }
+    return { summary: lines.join("\n") };
+  },
+  async cancelRefresh(): Promise<void> {
+    // no-op in fallback
+  },
+  onRefreshProgress(_callback: (data: RefreshProgress) => void): void {
+    // no-op in fallback
+  },
+  onSummaryToken(_callback: (data: { repoId: string; token: string }) => void): void {
+    // no-op in fallback
+  },
+  async getCategoryCounts(_window: TrendWindow): Promise<CategoryCounts> {
+    const counts: CategoryCounts = {};
+    for (const record of fallbackRecords) {
+      const cat = record.classification.primaryCategory;
+      counts[cat] = (counts[cat] ?? 0) + 1;
+    }
+    return counts;
   }
 };
