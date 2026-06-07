@@ -1,9 +1,9 @@
 /// <reference types="vite/client" />
 
-import type { AppApi } from "../shared/types";
+import type { AppApiV2 } from "../shared/types";
 
 declare global {
   interface Window {
-    githubIntel?: AppApi;
+    githubIntel?: AppApiV2;
   }
 }

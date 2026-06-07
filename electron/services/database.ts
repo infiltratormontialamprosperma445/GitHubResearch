@@ -1,4 +1,3 @@
-import { app } from "electron";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -73,7 +72,7 @@ export class AppDatabase {
   ) {}
 
   static async open(): Promise<AppDatabase> {
-    const userData = app.getPath("userData");
+    const userData = process.env.STAR_INTEL_USER_DATA ?? join(process.cwd(), ".star-intel-data");
     mkdirSync(userData, { recursive: true });
     const dbPath = join(userData, "starIntel.db");
     const oldDbPath = join(userData, "star-intel.sqlite");

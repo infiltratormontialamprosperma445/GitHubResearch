@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, utilityProcess } from "electron";
-import type { UtilityProcess } from "electron";
+import type { IpcMainInvokeEvent, UtilityProcess } from "electron";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,18 +10,35 @@ import {
   Settings,
   TrendWindow,
   SearchFilters,
-  SortOption
+  SortOption,
+  SourceHealth
 } from "../src/shared/types.js";
 import type { MainToWorkerMessage, WorkerToMainMessage } from "../src/shared/workerProtocol.js";
+import { AppDatabase } from "./services/database.js";
+import { IntelligenceService } from "./services/intelligence.js";
 import { summarizeRepo, summarizeBatch } from "./services/summaryService.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const APP_ID = "local.star-intel.desk";
+const APP_ID = "com.star-intel-desk.app";
 
 let mainWindow: BrowserWindow | undefined;
 let worker: UtilityProcess | undefined;
 let autoRefreshDate = "";
 let isRefreshing = false;
+let workerRestartAttempts = 0;
+let fallbackServicePromise: Promise<{ db: AppDatabase; service: IntelligenceService }> | undefined;
+let localRefreshAbort: AbortController | undefined;
+
+const ENABLE_UTILITY_WORKER = process.env.STAR_INTEL_ENABLE_WORKER === "1";
+const MAX_WORKER_RESTARTS = 2;
+const NON_IDEMPOTENT_WORKER_METHODS = new Set([
+  "toggleCollection",
+  "saveNote",
+  "saveAlert",
+  "overrideClassification",
+  "backupData",
+  "updateSettings"
+]);
 
 // Pending query map — each QUERY sent to the worker gets a unique ID,
 // and we store the resolve/reject pair so we can settle the Promise
@@ -46,8 +63,17 @@ if (process.platform === "win32") {
   app.setAppUserModelId(APP_ID);
 }
 
+function configureProcessEnvironment(): void {
+  process.env.STAR_INTEL_USER_DATA = app.getPath("userData");
+}
+
 async function bootstrap(): Promise<void> {
-  startWorker();
+  configureProcessEnvironment();
+  if (ENABLE_UTILITY_WORKER) {
+    startWorker();
+  } else {
+    console.log("[main] Utility worker disabled; using main-process data service.");
+  }
   registerIpc();
   createWindow();
   startScheduler();
@@ -80,6 +106,9 @@ function createWindow(): void {
     }
   });
 
+  mainWindow.on("maximize", () => sendMaximizedState());
+  mainWindow.on("unmaximize", () => sendMaximizedState());
+
   if (app.isPackaged) {
     mainWindow.loadFile(join(__dirname, "../../dist/index.html"));
   } else {
@@ -98,6 +127,28 @@ function resolveWindowIcon(): string | undefined {
   return existsSync(iconPath) ? iconPath : undefined;
 }
 
+function sendMaximizedState(win = mainWindow): void {
+  if (!win || win.isDestroyed()) return;
+  win.webContents.send("window:maximized-changed", win.isMaximized());
+}
+
+function workerUnavailableSource(error?: unknown): SourceHealth[] {
+  return [
+    {
+      id: "local-worker",
+      label: "Local Data Worker",
+      configured: true,
+      enabled: true,
+      status: "degraded",
+      message: error instanceof Error
+        ? `Local data worker is unavailable: ${error.message}`
+        : "Local data worker is starting. Try again in a moment.",
+      weight: 0,
+      coverage: 0
+    }
+  ];
+}
+
 // ── Worker management ──────────────────────────────────────────
 
 function startWorker(): void {
@@ -106,7 +157,8 @@ function startWorker(): void {
 
   worker = utilityProcess.fork(workerPath, [], {
     serviceName: "star-intel-worker",
-    execArgv: []
+    execArgv: [],
+    env: process.env
   });
 
   worker.on("message", (event: { data: WorkerToMainMessage }) => {
@@ -128,11 +180,16 @@ function startWorker(): void {
       isRefreshing = false;
     }
 
-    // Restart the worker after a short delay
-    setTimeout(() => {
-      console.log("[main] Restarting worker...");
-      startWorker();
-    }, 3000);
+    // Restart a couple of times, then rely on the main-process fallback.
+    workerRestartAttempts += 1;
+    if (workerRestartAttempts <= MAX_WORKER_RESTARTS) {
+      setTimeout(() => {
+        console.log("[main] Restarting worker...");
+        startWorker();
+      }, 3000);
+    } else {
+      console.warn("[main] Worker failed repeatedly; using main-process data fallback.");
+    }
   });
 }
 
@@ -262,6 +319,92 @@ function postToWorker(msg: MainToWorkerMessage): void {
   }
 }
 
+async function getFallbackService(): Promise<{ db: AppDatabase; service: IntelligenceService }> {
+  if (!fallbackServicePromise) {
+    fallbackServicePromise = AppDatabase.open().then((db) => ({
+      db,
+      service: new IntelligenceService(db)
+    }));
+  }
+  return fallbackServicePromise;
+}
+
+async function queryLocal(method: string, ...args: any[]): Promise<any> {
+  const { db, service } = await getFallbackService();
+
+  switch (method) {
+    case "getDashboard":
+      return service.getDashboard();
+    case "listRepos":
+      return service.listRepos(args[0]);
+    case "getRepo":
+      return service.getRepo(args[0]);
+    case "getSettings":
+      return service.getSettings();
+    case "getSources":
+      return service.getSources();
+    case "getLatestJob":
+      return service.getLatestJob();
+    case "getRateLimits":
+      return service.getRateLimits();
+    case "toggleCollection":
+      return service.toggleCollection(args[0], args[1]);
+    case "saveNote":
+      return service.saveNote(args[0], args[1], args[2], args[3]);
+    case "saveAlert":
+      return service.saveAlert(args[0]);
+    case "overrideClassification":
+      return service.overrideClassification(args[0]);
+    case "searchRepos":
+      return service.search(args[0], args[1], args[2]);
+    case "getCategoryCounts":
+      return service.getCategoryCounts(args[0]);
+    case "exportLearningMarkdown":
+      return service.exportLearningMarkdown();
+    case "backupData":
+      return service.backupData();
+    case "testConnection":
+      return service.testConnection(args[0]);
+    case "countRepos":
+      return db.countRepos();
+    case "updateSettings":
+      return service.updateSettings(args[0]);
+    default:
+      throw new Error(`Unknown query method: ${method}`);
+  }
+}
+
+async function queryData(method: string, ...args: any[]): Promise<any> {
+  if (!worker) {
+    return queryLocal(method, ...args);
+  }
+  try {
+    return await queryWorker(method, ...args);
+  } catch (error) {
+    if (NON_IDEMPOTENT_WORKER_METHODS.has(method)) throw error;
+    console.warn("[main] Worker query failed; using main-process fallback:", error instanceof Error ? error.message : String(error));
+    return queryLocal(method, ...args);
+  }
+}
+
+async function refreshLocal(windows: string[]): Promise<any> {
+  const { service } = await getFallbackService();
+  const trendWindow = windows.length === 1
+    ? (windows[0] as "daily" | "weekly" | "monthly" | "historical")
+    : undefined;
+
+  localRefreshAbort = new AbortController();
+  try {
+    return await service.refresh(trendWindow, (progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("refresh:progress", progress);
+      }
+    }, localRefreshAbort.signal);
+  } finally {
+    localRefreshAbort = undefined;
+  }
+}
+
 // ── IPC registration ───────────────────────────────────────────
 
 function registerIpc(): void {
@@ -276,16 +419,42 @@ function registerIpc(): void {
       }
     };
 
+  // ── Window controls ──────────────────────────────────────────
+
+  ipcMain.handle("window:minimize", safe((event: IpcMainInvokeEvent) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
+  }));
+
+  ipcMain.handle("window:maximize", safe((event: IpcMainInvokeEvent) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return false;
+    if (win.isMaximized()) {
+      win.unmaximize();
+    } else {
+      win.maximize();
+    }
+    sendMaximizedState(win);
+    return win.isMaximized();
+  }));
+
+  ipcMain.handle("window:close", safe((event: IpcMainInvokeEvent) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
+  }));
+
+  ipcMain.handle("window:isMaximized", safe((event: IpcMainInvokeEvent) => {
+    return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false;
+  }));
+
   // ── Read queries (forwarded to worker) ──────────────────────
 
-  ipcMain.handle("dashboard:get", safe(() => queryWorker("getDashboard")));
+  ipcMain.handle("dashboard:get", safe(() => queryData("getDashboard")));
 
   ipcMain.handle("repos:list", safe((_event: any, filters: RepoFilters) =>
-    queryWorker("listRepos", filters)
+    queryData("listRepos", filters)
   ));
 
   ipcMain.handle("repos:get", safe((_event: any, repoId: string) =>
-    queryWorker("getRepo", repoId)
+    queryData("getRepo", repoId)
   ));
 
   // ── Refresh (special protocol) ──────────────────────────────
@@ -310,17 +479,43 @@ function registerIpc(): void {
 
     const windows = window ? [window] : ["daily", "weekly", "monthly"];
 
+    const activeWorker = worker;
+    if (!activeWorker) {
+      try {
+        return await refreshLocal(windows);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
     return new Promise<any>((resolve) => {
-      // Store reference to resolve function for handleWorkerMessage
+      const finish = (result: any): void => {
+        activeWorker.removeListener("message", messageListener);
+        activeWorker.removeListener("exit", exitListener);
+        isRefreshing = false;
+        resolve(result);
+      };
+
+      const exitListener = () => finish({
+        jobId: "",
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        windows: [],
+        discovered: 0,
+        enriched: 0,
+        classified: 0,
+        scored: 0,
+        warnings: ["Refresh worker exited before the refresh completed."],
+        steps: []
+      });
+
       const onMessage = (msg: WorkerToMainMessage): void => {
         switch (msg.type) {
           case "REFRESH_DONE":
-            worker?.removeListener("message", messageListener);
-            resolve(msg.stats.result);
+            finish(msg.stats.result);
             break;
           case "REFRESH_ERROR":
-            worker?.removeListener("message", messageListener);
-            resolve({
+            finish({
               jobId: "",
               startedAt: new Date().toISOString(),
               completedAt: new Date().toISOString(),
@@ -334,8 +529,7 @@ function registerIpc(): void {
             });
             break;
           case "REFRESH_CANCELLED":
-            worker?.removeListener("message", messageListener);
-            resolve({
+            finish({
               jobId: "",
               startedAt: new Date().toISOString(),
               completedAt: new Date().toISOString(),
@@ -355,26 +549,26 @@ function registerIpc(): void {
         onMessage(event.data);
       };
 
-      worker?.on("message", messageListener);
-
-      // Send the refresh command
-      postToWorker({ type: "REFRESH_START", payload: { windows } });
+      activeWorker.on("message", messageListener);
+      activeWorker.once("exit", exitListener);
+      activeWorker.postMessage({ type: "REFRESH_START", payload: { windows } });
     });
   }));
 
   ipcMain.handle("refresh:status", safe(() => ({ isRefreshing })));
 
   ipcMain.handle("refresh:cancel", safe(() => {
+    localRefreshAbort?.abort();
     postToWorker({ type: "REFRESH_CANCEL" });
   }));
 
   // ── Settings ────────────────────────────────────────────────
 
-  ipcMain.handle("settings:get", safe(() => queryWorker("getSettings")));
+  ipcMain.handle("settings:get", safe(() => queryData("getSettings")));
 
   ipcMain.handle("settings:update", safe((_event: any, settings: Partial<Settings>) => {
     // Update settings via the worker (which owns the DB)
-    const result = queryWorker("updateSettings", settings);
+    const result = queryData("updateSettings", settings);
     // Also handle login item from the main process where app is always available
     if (typeof settings.startAtLogin === "boolean" && process.platform !== "darwin") {
       app.setLoginItemSettings({
@@ -387,34 +581,48 @@ function registerIpc(): void {
 
   // ── More read queries (forwarded to worker) ─────────────────
 
-  ipcMain.handle("sources:get", safe(() => queryWorker("getSources")));
-  ipcMain.handle("jobs:latest", safe(() => queryWorker("getLatestJob")));
-  ipcMain.handle("rate-limits:get", safe(() => queryWorker("getRateLimits")));
+  ipcMain.handle("sources:get", safe(async () => {
+    try {
+      const sources = await queryData("getSources") as SourceHealth[] | undefined;
+      return sources?.length ? sources : workerUnavailableSource();
+    } catch (error) {
+      return workerUnavailableSource(error);
+    }
+  }));
+  ipcMain.handle("jobs:latest", safe(() => queryData("getLatestJob")));
+  ipcMain.handle("rate-limits:get", safe(() => queryData("getRateLimits")));
 
   // ── Write mutations (forwarded to worker) ───────────────────
 
   ipcMain.handle("collection:toggle", safe((_event: any, repoId: string, status?: RepoStatus) =>
-    queryWorker("toggleCollection", repoId, status)
+    queryData("toggleCollection", repoId, status)
   ));
 
   ipcMain.handle("notes:save", safe((_event: any, repoId: string, markdown: string, tags: string[], status: RepoStatus) =>
-    queryWorker("saveNote", repoId, markdown, tags, status)
+    queryData("saveNote", repoId, markdown, tags, status)
   ));
 
   ipcMain.handle("alerts:save", safe((_event: any, rule: any) =>
-    queryWorker("saveAlert", rule)
+    queryData("saveAlert", rule)
   ));
 
   ipcMain.handle("classifier:override", safe((_event: any, input: ClassificationOverrideInput) =>
-    queryWorker("overrideClassification", input)
+    queryData("overrideClassification", input)
   ));
 
-  ipcMain.handle("learning:export", safe(() => queryWorker("exportLearningMarkdown")));
-  ipcMain.handle("backup:create", safe(() => queryWorker("backupData")));
+  ipcMain.handle("learning:export", safe(() => queryData("exportLearningMarkdown")));
+  ipcMain.handle("backup:create", safe(() => queryData("backupData")));
 
-  ipcMain.handle("connection:test", safe((_event: any, kind: "github" | "ai") =>
-    queryWorker("testConnection", kind)
-  ));
+  ipcMain.handle("connection:test", safe(async (_event: any, kind: "github" | "ai") => {
+    try {
+      const result = await queryData("testConnection", kind) as { ok: boolean; message: string } | undefined;
+      if (result?.message) return result;
+      return { ok: false, message: "Connection check is unavailable. The local data worker may still be starting." };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, message: `Connection check is unavailable: ${message}` };
+    }
+  }));
 
   // ── External URL (stays in main process) ────────────────────
 
@@ -425,28 +633,28 @@ function registerIpc(): void {
   // ── v2.0: Search ────────────────────────────────────────────
 
   ipcMain.handle("search:run", safe((_event: any, query: string, filters: SearchFilters, sort: SortOption) =>
-    queryWorker("searchRepos", query, filters, sort)
+    queryData("searchRepos", query, filters, sort)
   ));
 
   // ── v2.0: Summary ───────────────────────────────────────────
 
   ipcMain.handle("summary:repo", safe(async (_event: any, repoId: string, force?: boolean) => {
-    const settings = await queryWorker("getSettings") as Settings;
+    const settings = await queryData("getSettings") as Settings;
     const webContents = mainWindow?.webContents;
 
     return summarizeRepo(
       repoId,
       Boolean(force),
-      queryWorker,
+      queryData,
       settings,
       webContents
     );
   }));
 
   ipcMain.handle("summary:batch", safe(async (_event: any, repoIds: string[], title: string) => {
-    const settings = await queryWorker("getSettings") as Settings;
+    const settings = await queryData("getSettings") as Settings;
 
-    return summarizeBatch(repoIds, title, queryWorker, settings);
+    return summarizeBatch(repoIds, title, queryData, settings);
   }));
 
   ipcMain.handle("summary:cancel", safe(() => {
@@ -459,7 +667,7 @@ function registerIpc(): void {
   // ── v2.0: Category counts ──────────────────────────────────
 
   ipcMain.handle("repos:categoryCounts", safe((_event: any, window: TrendWindow) =>
-    queryWorker("getCategoryCounts", window)
+    queryData("getCategoryCounts", window)
   ));
 }
 
@@ -468,17 +676,24 @@ function registerIpc(): void {
 function startScheduler(): void {
   setInterval(async () => {
     try {
-      const settings = await queryWorker("getSettings") as Settings;
+      const settings = await queryData("getSettings") as Settings;
       if (!settings.backgroundRefresh) return;
       const now = new Date();
       const today = now.toISOString().slice(0, 10);
       const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
       if (currentTime === settings.refreshTime && autoRefreshDate !== today && !isRefreshing) {
         autoRefreshDate = today;
-        postToWorker({
-          type: "REFRESH_START",
-          payload: { windows: ["daily", "weekly", "monthly"] }
-        });
+        if (!worker) {
+          isRefreshing = true;
+          void refreshLocal(["daily", "weekly", "monthly"]).finally(() => {
+            isRefreshing = false;
+          });
+        } else {
+          postToWorker({
+            type: "REFRESH_START",
+            payload: { windows: ["daily", "weekly", "monthly"] }
+          });
+        }
       }
     } catch (error) {
       console.error("[scheduler] Error checking settings:", error instanceof Error ? error.message : String(error));

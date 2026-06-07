@@ -413,6 +413,17 @@ export interface RefreshProgress {
 
 export type CategoryCounts = Record<string, number>;
 
+export type DesktopPlatform = "win32" | "darwin" | "linux" | "browser" | string;
+
+export interface WindowControlsApi {
+  platform: DesktopPlatform;
+  minimize(): Promise<void>;
+  toggleMaximize(): Promise<boolean>;
+  close(): Promise<void>;
+  isMaximized(): Promise<boolean>;
+  onMaximizedChange(callback: (isMaximized: boolean) => void): () => void;
+}
+
 export interface PaginatedResult<T> {
   items: T[];
   total: number;
@@ -423,6 +434,7 @@ export interface PaginatedResult<T> {
 
 // Extend AppApi with new v2.0 methods
 export interface AppApiV2 extends AppApi {
+  windowControls: WindowControlsApi;
   search(query: string, filters: SearchFilters, sort: SortOption): Promise<SearchResult[]>;
   summarizeRepo(repoId: string, force?: boolean): Promise<{ cached: boolean; summary?: string }>;
   summarizeBatch(repoIds: string[], title: string): Promise<{ summary: string }>;

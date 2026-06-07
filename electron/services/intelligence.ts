@@ -422,7 +422,15 @@ export class IntelligenceService {
     const settings = this.getSettings();
     if (kind === "github") {
       const adapter = this.adapters.find((item) => item.id === "github-search");
-      return adapter?.validateSettings(this.sourceSettings(settings)) ?? { ok: false, message: "GitHub adapter not found." };
+      const result = await adapter?.validateSettings(this.sourceSettings(settings));
+      if (!result) return { ok: false, message: "GitHub adapter not found." };
+      if (!settings.githubToken && result.ok) {
+        return {
+          ok: true,
+          message: "GitHub is available in anonymous mode. Add a token for higher rate limits."
+        };
+      }
+      return result;
     }
     if (!settings.aiApiKey) return { ok: false, message: "AI API key is empty." };
     const result = await fetch(`${settings.aiBaseUrl.replace(/\/$/, "")}/models`, {

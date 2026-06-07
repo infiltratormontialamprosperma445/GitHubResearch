@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { IpcRendererEvent } from "electron";
 import type {
   AlertRule,
   AppApiV2,
@@ -55,6 +56,19 @@ const api: AppApiV2 = {
     ipcRenderer.invoke("connection:test", kind),
 
   openExternal: (url: string) => ipcRenderer.invoke("external:open", url),
+
+  windowControls: {
+    platform: process.platform,
+    minimize: () => ipcRenderer.invoke("window:minimize"),
+    toggleMaximize: () => ipcRenderer.invoke("window:maximize"),
+    close: () => ipcRenderer.invoke("window:close"),
+    isMaximized: () => ipcRenderer.invoke("window:isMaximized"),
+    onMaximizedChange: (callback: (isMaximized: boolean) => void) => {
+      const listener = (_event: IpcRendererEvent, isMaximized: boolean) => callback(Boolean(isMaximized));
+      ipcRenderer.on("window:maximized-changed", listener);
+      return () => ipcRenderer.removeListener("window:maximized-changed", listener);
+    }
+  },
 
   // ── v2.0: Search ───────────────────────────────────────────
 

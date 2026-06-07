@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Command,
+  Copy,
   Database,
   Download,
   ExternalLink,
@@ -19,6 +20,7 @@ import {
   Inbox,
   LayoutDashboard,
   Loader2,
+  Minus,
   Moon,
   RefreshCw,
   Save,
@@ -26,6 +28,7 @@ import {
   Settings as SettingsIcon,
   ShieldCheck,
   Sparkles,
+  Square,
   Star,
   Sun,
   Tag,
@@ -474,6 +477,30 @@ function TitleBar({ theme, onToggleTheme, onOpenCommandPalette, onRefresh, isRef
   isRefreshing: boolean;
 }) {
   const { t, locale, setLocale } = useI18n();
+  const { windowControls } = apiV2;
+  const [isMaximized, setIsMaximized] = useState(false);
+  const showWindowControls = windowControls.platform !== "darwin";
+
+  useEffect(() => {
+    if (!showWindowControls) return;
+    let mounted = true;
+    void windowControls.isMaximized()
+      .then((value) => {
+        if (mounted) setIsMaximized(Boolean(value));
+      })
+      .catch(() => {});
+    const unsubscribe = windowControls.onMaximizedChange((value) => setIsMaximized(value));
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, [showWindowControls, windowControls]);
+
+  const toggleMaximize = async () => {
+    const nextState = await windowControls.toggleMaximize().catch(() => isMaximized);
+    setIsMaximized(Boolean(nextState));
+  };
+
   return (
     <header className="titlebar" style={{ WebkitAppRegion: "drag" } as CSSProperties}>
       <div className="titlebar-left">
@@ -483,24 +510,58 @@ function TitleBar({ theme, onToggleTheme, onOpenCommandPalette, onRefresh, isRef
         </div>
         <span className="titlebar-subtitle">{t("app.subtitle")}</span>
       </div>
-      <div className="titlebar-actions">
-        <button className="btn btn--ghost btn--xs" onClick={onOpenCommandPalette} title={t("search.openCommand")}>
-          <Search size={14} />
-          <kbd className="kbd-hint" style={{ fontSize: 9, height: 16, minWidth: 14, padding: "0 3px" }}>/</kbd>
-        </button>
-        <LanguageToggle locale={locale} onChange={setLocale} label={t("language.label")} />
-        <button className="btn btn--ghost btn--xs" onClick={onToggleTheme} title={t("action.theme")}>
-          {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-        </button>
-        <button
-          className="btn btn--solid btn--xs"
-          onClick={onRefresh}
-          disabled={isRefreshing}
-          title={t("action.refreshTitle")}
-        >
-          <RefreshCw size={13} className={clsx(isRefreshing && "spin")} />
-          <span>{isRefreshing ? t("action.refreshing") : t("action.refresh")}</span>
-        </button>
+      <div className="titlebar-right">
+        <div className="titlebar-actions">
+          <button className="btn btn--ghost btn--xs" type="button" onClick={onOpenCommandPalette} title={t("search.openCommand")}>
+            <Search size={14} />
+            <kbd className="kbd-hint" style={{ fontSize: 9, height: 16, minWidth: 14, padding: "0 3px" }}>/</kbd>
+          </button>
+          <LanguageToggle locale={locale} onChange={setLocale} label={t("language.label")} />
+          <button className="btn btn--ghost btn--xs" type="button" onClick={onToggleTheme} title={t("action.theme")}>
+            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
+          <button
+            className="btn btn--solid btn--xs"
+            type="button"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            title={t("action.refreshTitle")}
+          >
+            <RefreshCw size={13} className={clsx(isRefreshing && "spin")} />
+            <span>{isRefreshing ? t("action.refreshing") : t("action.refresh")}</span>
+          </button>
+        </div>
+        {showWindowControls && (
+          <div className="titlebar-window-controls" aria-label={t("windowControl.group")}>
+            <button
+              className="window-control"
+              type="button"
+              title={t("windowControl.minimize")}
+              aria-label={t("windowControl.minimize")}
+              onClick={() => void windowControls.minimize()}
+            >
+              <Minus size={14} />
+            </button>
+            <button
+              className="window-control"
+              type="button"
+              title={isMaximized ? t("windowControl.restore") : t("windowControl.maximize")}
+              aria-label={isMaximized ? t("windowControl.restore") : t("windowControl.maximize")}
+              onClick={() => void toggleMaximize()}
+            >
+              {isMaximized ? <Copy size={13} /> : <Square size={12} />}
+            </button>
+            <button
+              className="window-control window-control--close"
+              type="button"
+              title={t("windowControl.close")}
+              aria-label={t("windowControl.close")}
+              onClick={() => void windowControls.close()}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );
@@ -1047,6 +1108,15 @@ function SettingsPanel({ settings, onSaved }: { settings: Settings; onSaved: (se
   const [connectionMessage, setConnectionMessage] = useState("");
   useEffect(() => setForm(settings), [settings]);
   const set = (key: keyof Settings, value: string | boolean) => setForm((current) => ({ ...current, [key]: value }));
+  const testConnection = async (kind: "github" | "ai") => {
+    try {
+      const result = await api.testConnection(kind);
+      setConnectionMessage(result?.message ?? t("connection.unavailable"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setConnectionMessage(`${t("connection.unavailable")} ${message}`);
+    }
+  };
 
   return (
     <section className="panel full settings-form">
@@ -1072,16 +1142,10 @@ function SettingsPanel({ settings, onSaved }: { settings: Settings; onSaved: (se
       </div>
       {connectionMessage && <p className="settings-message">{connectionMessage}</p>}
       <div className="settings-actions">
-        <button className="icon-button" type="button" onClick={async () => {
-          const result = await api.testConnection("github");
-          setConnectionMessage(result.message);
-        }}>
+        <button className="icon-button" type="button" onClick={() => void testConnection("github")}>
           <ShieldCheck size={15} /> {t("action.testGithub")}
         </button>
-        <button className="icon-button" type="button" onClick={async () => {
-          const result = await api.testConnection("ai");
-          setConnectionMessage(result.message);
-        }}>
+        <button className="icon-button" type="button" onClick={() => void testConnection("ai")}>
           <Brain size={15} /> {t("action.testAi")}
         </button>
         <button className="icon-button" type="button" onClick={async () => {

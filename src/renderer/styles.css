@@ -249,18 +249,25 @@ a:focus-visible,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 0 0 12px;
   user-select: none;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border);
   z-index: var(--z-sticky);
 }
 
-.titlebar * {
+.titlebar button,
+.titlebar input,
+.titlebar select,
+.titlebar textarea,
+.titlebar-actions,
+.titlebar-window-controls,
+.language-toggle {
   -webkit-app-region: no-drag;
 }
 
 .titlebar-left {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -279,6 +286,7 @@ a:focus-visible,
   place-items: center;
   border-radius: 5px;
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-active) 100%);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset, 0 6px 18px var(--accent-glow);
   color: #fff;
   font-weight: 700;
   font-size: 10px;
@@ -290,18 +298,65 @@ a:focus-visible,
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .titlebar-subtitle {
+  min-width: 0;
   font-size: 11px;
   color: var(--text-muted);
   margin-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar-right {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .titlebar-actions {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.titlebar-window-controls {
+  height: 100%;
+  display: flex;
+  align-items: stretch;
+  margin-left: 2px;
+  border-left: 1px solid var(--border);
+}
+
+.window-control {
+  width: 46px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.window-control:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.window-control:focus-visible {
+  outline: 1px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
+.window-control--close:hover {
+  background: var(--danger);
+  color: #fff;
 }
 
 /* ── Workspace Grid ──────────────────────────────────────────── */

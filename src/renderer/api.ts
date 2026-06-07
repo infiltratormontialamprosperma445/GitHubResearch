@@ -229,6 +229,14 @@ export const api: AppApi = window.githubIntel ?? {
 // v2 extended API with fallback implementations
 export const apiV2: AppApiV2 = (window.githubIntel as AppApiV2 | undefined) ?? {
   ...api,
+  windowControls: {
+    platform: "browser",
+    minimize: async () => {},
+    toggleMaximize: async () => false,
+    close: async () => {},
+    isMaximized: async () => false,
+    onMaximizedChange: () => () => {}
+  },
   async search(_query: string, _filters: SearchFilters, _sort: SortOption): Promise<SearchResult[]> {
     // Fallback: filter fallbackRecords by query text
     const q = _query.toLowerCase();
