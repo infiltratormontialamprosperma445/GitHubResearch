@@ -7,7 +7,7 @@ import { DiscoveredRepository, SourceAdapter, SourceSettings } from "./types.js"
 import { ProxyAgent } from "undici";
 import { createHash } from "node:crypto";
 
-const USER_AGENT = "Star-Intel-Desk/0.1 (Desktop Intelligence)";
+const USER_AGENT = "Star-Intel-Desk/1.0 (Desktop Intelligence)";
 
 // ─── Curated AI signal channels/accounts ────────────────────────────────────────
 
@@ -25,9 +25,14 @@ const TELEGRAM_AI_CHANNELS = [
 ];
 
 const TWITTER_AI_SEARCH_QUERIES = [
-  "github.com AI agent stars:>100",
+  "github.com Claude Code coding agent",
+  "github.com OpenAI agents SDK",
+  "github.com ChatGPT prompt library",
   "github.com MCP server LLM",
-  "github.com coding agent autonomous",
+  "github.com coding agent CLI",
+  "github.com aider cursor windsurf codex",
+  "github.com prompt workflow LLM",
+  "github.com AI agent stars:>100",
   "github.com RAG retrieval vector",
   "github.com multimodal model open source",
   "github.com AI framework new release"
@@ -402,11 +407,14 @@ function isBlacklistedRepo(fullNameLower: string): boolean {
 function inferSocialTopics(text: string): string[] {
   const lower = text.toLowerCase();
   const candidates = [
-    "agent", "mcp", "llm", "rag", "ai", "ml", "model",
+    "claude-code", "claude", "anthropic", "openai-agents", "openai", "chatgpt",
+    "codex", "aider", "cursor", "windsurf", "cline", "roo-code", "openhands",
+    "coding-agent", "terminal-agent", "agent", "mcp-server", "mcp", "llm", "rag",
+    "prompt-library", "prompt-workflow", "prompt", "skills", "plugins", "ai", "ml", "model",
     "transformer", "diffusion", "fine-tune", "inference",
     "react", "cli", "security", "kubernetes"
   ];
-  const matched = candidates.filter((topic) => lower.includes(topic));
+  const matched = candidates.filter((topic) => lower.includes(topic) || lower.includes(topic.replace(/-/g, " ")));
   return matched.length ? matched : ["ai-social-signal"];
 }
 

@@ -90,12 +90,16 @@ const api: AppApiV2 = {
 
   // ── v2.0: Event listeners ──────────────────────────────────
 
-  onRefreshProgress: (callback: (data: RefreshProgress) => void): void => {
-    ipcRenderer.on("refresh:progress", (_event, data) => callback(data));
+  onRefreshProgress: (callback: (data: RefreshProgress) => void): () => void => {
+    const listener = (_event: IpcRendererEvent, data: RefreshProgress) => callback(data);
+    ipcRenderer.on("refresh:progress", listener);
+    return () => ipcRenderer.removeListener("refresh:progress", listener);
   },
 
-  onSummaryToken: (callback: (data: { repoId: string; token: string }) => void): void => {
-    ipcRenderer.on("summary:token", (_event, data) => callback(data));
+  onSummaryToken: (callback: (data: { repoId: string; token: string }) => void): () => void => {
+    const listener = (_event: IpcRendererEvent, data: { repoId: string; token: string }) => callback(data);
+    ipcRenderer.on("summary:token", listener);
+    return () => ipcRenderer.removeListener("summary:token", listener);
   },
 
   // ── v2.0: Category counts ──────────────────────────────────

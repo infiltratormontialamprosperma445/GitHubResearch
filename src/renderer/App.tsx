@@ -1,4 +1,4 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
@@ -77,6 +77,7 @@ const MODULES: Array<{ id: ModuleId; labelKey: string; icon: typeof LayoutDashbo
 ];
 
 const PAGE_SIZE = 50;
+const APP_VERSION = "1.0.0";
 
 // ── Theme management ──────────────────────────────────────────
 
@@ -109,6 +110,8 @@ export default function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [page, setPage] = useState(1);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const progressFrame = useRef<number | undefined>(undefined);
+  const pendingProgress = useRef<RefreshProgress | null>(null);
 
   // Apply theme to document
   useEffect(() => {
@@ -140,7 +143,7 @@ export default function App() {
         window,
         search,
         primaryCategory: category,
-        limit: PAGE_SIZE
+        limit: PAGE_SIZE * page
       }),
     placeholderData: keepPreviousData
   });
@@ -189,7 +192,11 @@ export default function App() {
       });
       setTimeout(() => setRefreshProgress(null), 800);
       showToast(t("toast.refreshComplete", { discovered: result.discovered, warnings: result.warnings.length }));
-      void queryClient.invalidateQueries();
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["repos"] });
+      void queryClient.invalidateQueries({ queryKey: ["category-counts"] });
+      void queryClient.invalidateQueries({ queryKey: ["sources"] });
+      void queryClient.invalidateQueries({ queryKey: ["rate-limits"] });
     },
     onError: (error) => {
       setRefreshProgress(null);
@@ -197,14 +204,45 @@ export default function App() {
     }
   });
 
-  // Listen for real progress events from IPC
+  // Listen for real progress events from IPC, coalescing non-terminal updates.
   useEffect(() => {
     const v2 = apiV2;
-    if (v2.onRefreshProgress) {
-      v2.onRefreshProgress((data: RefreshProgress) => {
+    if (!v2.onRefreshProgress) return;
+
+    const flushProgress = () => {
+      progressFrame.current = undefined;
+      if (pendingProgress.current) {
+        setRefreshProgress(pendingProgress.current);
+        pendingProgress.current = null;
+      }
+    };
+
+    const unsubscribe = v2.onRefreshProgress((data: RefreshProgress) => {
+      const terminal = data.phase === "done" || data.phase === "error" || data.phase === "cancelled";
+      if (terminal) {
+        pendingProgress.current = null;
+        if (progressFrame.current !== undefined) {
+          globalThis.cancelAnimationFrame(progressFrame.current);
+          progressFrame.current = undefined;
+        }
         setRefreshProgress(data);
-      });
-    }
+        return;
+      }
+
+      pendingProgress.current = data;
+      if (progressFrame.current === undefined) {
+        progressFrame.current = globalThis.requestAnimationFrame(flushProgress);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      if (progressFrame.current !== undefined) {
+        globalThis.cancelAnimationFrame(progressFrame.current);
+        progressFrame.current = undefined;
+      }
+      pendingProgress.current = null;
+    };
   }, []);
 
   // ── Derived state ──────────────────────────────────────────
@@ -214,6 +252,11 @@ export default function App() {
   const totalWindowRepos = useMemo(() => {
     return Object.values(categoryCounts).reduce((sum, count) => sum + count, 0);
   }, [categoryCounts]);
+  const displayedTotalRepos = useMemo(() => {
+    if (search) return records.length >= PAGE_SIZE * page ? records.length + 1 : records.length;
+    if (category !== "All") return categoryCounts[category] ?? records.length;
+    return totalWindowRepos || records.length;
+  }, [category, categoryCounts, page, records.length, search, totalWindowRepos]);
 
   const selected = useMemo(
     () => records.find((record) => record.repo.id === selectedId) ?? records[0] ?? dashboardQuery.data?.hotRepos[0],
@@ -375,6 +418,7 @@ export default function App() {
           {activeModule === "explorer" && (
             <TrendingExplorer
               records={records}
+              totalCount={displayedTotalRepos}
               loading={reposQuery.isFetching && !reposQuery.data}
               selectedId={selected?.repo.id}
               onSelect={(record) => setSelectedId(record.repo.id)}
@@ -639,7 +683,7 @@ function Dashboard({ records, summary, onSelect, onOpenExternal, onModule }: {
   onOpenExternal: (url: string) => void;
   onModule: (module: ModuleId) => void;
 }) {
-  const { t, locale, categoryLabel } = useI18n();
+  const { t, locale, categoryLabel, subcategoryLabel } = useI18n();
   const top = records[0];
   const isEmpty = records.length === 0;
 
@@ -706,6 +750,53 @@ function Dashboard({ records, summary, onSelect, onOpenExternal, onModule }: {
         <Metric label={t("dashboard.anomalyWatch")} value={summary?.anomalies.length ?? 0} icon={AlertTriangle} />
       </div>
 
+      {summary?.topInsights?.length ? (
+        <section className="panel wide">
+          <PanelHeader title={t("dashboard.keyInsights")} meta={t("dashboard.keyInsightsMeta")} />
+          <div className="insight-grid">
+            {summary.topInsights.map((insight) => (
+              <button key={insight.id} className={clsx("insight-card", insight.severity)} onClick={() => {
+                if (insight.repoId) {
+                  const record = records.find((item) => item.repo.id === insight.repoId) ?? summary.hotRepos.find((item) => item.repo.id === insight.repoId);
+                  if (record) onSelect(record);
+                }
+                if (insight.actionModule) onModule(insight.actionModule as ModuleId);
+              }}>
+                <span>{t(`insight.${insight.kind}`)}</span>
+                <strong>{insight.title}</strong>
+                <small>{insight.description}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {summary?.aiFocus?.length ? (
+        <section className="panel">
+          <PanelHeader title={t("dashboard.aiFocus")} action={t("module.categories")} onAction={() => onModule("categories")} />
+          <div className="focus-list">
+            {summary.aiFocus.slice(0, 5).map((item) => (
+              <button key={item.subcategory} className="focus-row" onClick={() => item.topRepo && onSelect(item.topRepo)}>
+                <span>{subcategoryLabel(item.subcategory)}</span>
+                <strong>{item.count}</strong>
+                <small>{item.topRepo?.repo.fullName ?? item.topTags.join(", ")}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {summary?.topicHighlights?.length ? (
+        <section className="panel">
+          <PanelHeader title={t("dashboard.topicHighlights")} />
+          <div className="topic-cloud">
+            {summary.topicHighlights.slice(0, 12).map((topic) => (
+              <span key={topic.label} className="topic-chip" title={topic.sampleRepo}>{topic.label}<strong>{topic.count}</strong></span>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="panel wide">
         <PanelHeader title={t("dashboard.hotRepos")} action={t("module.explorer")} onAction={() => onModule("explorer")} />
         <RepoList records={records.slice(0, 8)} onSelect={onSelect} onOpenExternal={onOpenExternal} />
@@ -744,8 +835,9 @@ function Dashboard({ records, summary, onSelect, onOpenExternal, onModule }: {
 
 // ── Trending Explorer ─────────────────────────────────────────
 
-function TrendingExplorer({ records, loading, selectedId, compareIds, onSelect, onOpenExternal, onToggleCompare, window, onWindowChange, page, setPage }: {
+function TrendingExplorer({ records, totalCount, loading, selectedId, compareIds, onSelect, onOpenExternal, onToggleCompare, window, onWindowChange, page, setPage }: {
   records: RepoRecord[];
+  totalCount: number;
   loading: boolean;
   selectedId?: string;
   compareIds: string[];
@@ -758,14 +850,14 @@ function TrendingExplorer({ records, loading, selectedId, compareIds, onSelect, 
   setPage: (page: number) => void;
 }) {
   const { t, locale, categoryLabel, subcategoryLabel } = useI18n();
-  const totalPages = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
-  const pagedRecords = records.slice(0, PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const pagedRecords = records.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <section className="panel full">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
         <div>
-          <PanelHeader title={t("explorer.title")} meta={t("common.repositories", { count: records.length })} />
+          <PanelHeader title={t("explorer.title")} meta={t("common.repositories", { count: totalCount })} />
         </div>
         <SegmentedWindow value={window} onChange={onWindowChange} />
       </div>
@@ -829,7 +921,7 @@ function TrendingExplorer({ records, loading, selectedId, compareIds, onSelect, 
         </table>
       </div>
       {/* Pagination */}
-      {records.length > PAGE_SIZE && (
+      {totalCount > PAGE_SIZE && (
         <div className="pagination">
           <button disabled={page <= 1} onClick={() => setPage(page - 1)}>
             <ChevronLeft size={14} /> {t("pagination.prev")}
@@ -858,10 +950,11 @@ function CategoryIntelligence({ records, onSelect, onOpenExternal, onOpenExplore
     const items = records.filter((record) => record.classification.primaryCategory === cat);
     return { category: cat, items, top: items[0] };
   }).filter((group) => group.items.length);
-  const aiBreakdown = AI_SUBCATEGORIES.map((subcategory) => ({
-    subcategory,
-    count: records.filter((record) => record.classification.secondaryCategory === subcategory).length
-  })).filter((item) => item.count);
+  const aiBreakdown = AI_SUBCATEGORIES.map((subcategory) => {
+    const items = records.filter((record) => record.classification.secondaryCategory === subcategory);
+    return { subcategory, count: items.length, top: items[0], tags: collectTopTags(items, 3) };
+  }).filter((item) => item.count);
+  const topTopics = collectTopTags(records, 12);
 
   return (
     <section className="page-grid">
@@ -877,15 +970,23 @@ function CategoryIntelligence({ records, onSelect, onOpenExternal, onOpenExplore
           ))}
         </div>
       </div>
-      <div className="panel">
-        <PanelHeader title={t("categories.aiSubcategories")} />
-        <div className="stack-list">
+      <div className="panel wide">
+        <PanelHeader title={t("categories.aiSubcategories")} meta={t("categories.aiMeta")} />
+        <div className="subcategory-grid">
           {aiBreakdown.map((item) => (
-            <div key={item.subcategory} className="stack-row">
+            <button key={item.subcategory} className="subcategory-card" onClick={() => item.top && onSelect(item.top)}>
               <span>{subcategoryLabel(item.subcategory)}</span>
               <strong>{item.count}</strong>
-            </div>
+              <small>{item.top?.repo.fullName ?? item.tags.join(", ")}</small>
+              <div className="tag-row compact">{item.tags.map((tag) => <TagPill key={tag} label={tag} />)}</div>
+            </button>
           ))}
+        </div>
+      </div>
+      <div className="panel">
+        <PanelHeader title={t("categories.topicSignals")} />
+        <div className="topic-cloud">
+          {topTopics.map((tag) => <span key={tag} className="topic-chip">{tag}</span>)}
         </div>
       </div>
       <div className="panel wide">
@@ -1102,44 +1203,114 @@ function ClassifierLab({ record, onSaved }: { record: RepoRecord; onSaved: () =>
 
 // ── Settings Panel ────────────────────────────────────────────
 
+function SettingsField({ label, help, children }: { label: string; help: string; children: ReactNode }) {
+  return (
+    <label>
+      <span>{label}</span>
+      {children}
+      <small className="field-help">{help}</small>
+    </label>
+  );
+}
+
 function SettingsPanel({ settings, onSaved }: { settings: Settings; onSaved: (settings: Settings) => void }) {
   const { t } = useI18n();
   const [form, setForm] = useState(settings);
   const [connectionMessage, setConnectionMessage] = useState("");
   useEffect(() => setForm(settings), [settings]);
   const set = (key: keyof Settings, value: string | boolean) => setForm((current) => ({ ...current, [key]: value }));
+  const setNumber = (key: "cacheTtlHours" | "maxReposPerWindow", value: string) => {
+    const parsed = Number(value);
+    setForm((current) => ({ ...current, [key]: Number.isFinite(parsed) ? parsed : current[key] }));
+  };
+  const validate = () => {
+    const errors: string[] = [];
+    if (!/^\d{2}:\d{2}$/.test(form.refreshTime)) errors.push(t("settings.validation.refreshTime"));
+    if (form.cacheTtlHours < 1 || form.cacheTtlHours > 72) errors.push(t("settings.validation.cacheTtl"));
+    if (form.maxReposPerWindow < 20 || form.maxReposPerWindow > 500) errors.push(t("settings.validation.maxRepos"));
+    for (const [key, value] of [["aiBaseUrl", form.aiBaseUrl], ["proxyUrl", form.proxyUrl]] as const) {
+      if (!value) continue;
+      try { new URL(value); } catch { errors.push(t(`settings.validation.${key}`)); }
+    }
+    return errors;
+  };
   const testConnection = async (kind: "github" | "ai") => {
     try {
       const result = await api.testConnection(kind);
-      setConnectionMessage(result?.message ?? t("connection.unavailable"));
+      const status = result?.ok ? t("connection.success") : t("connection.degraded");
+      setConnectionMessage(`${status}: ${result?.message ?? t("connection.unavailable")}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setConnectionMessage(`${t("connection.unavailable")} ${message}`);
     }
   };
+  const save = async () => {
+    const errors = validate();
+    if (errors.length) {
+      setConnectionMessage(errors.join(" "));
+      return;
+    }
+    onSaved(await api.updateSettings(form));
+  };
 
   return (
     <section className="panel full settings-form">
       <PanelHeader title={t("settings.title")} meta={t("settings.meta")} />
-      <div className="settings-grid">
-        <label>{t("settings.githubToken")}<input type="password" value={form.githubToken} onChange={(event) => set("githubToken", event.target.value)} placeholder={t("settings.githubTokenPlaceholder")} /></label>
-        <label>{t("settings.bigQueryProjectId")}<input value={form.bigQueryProjectId} onChange={(event) => set("bigQueryProjectId", event.target.value)} /></label>
-        <label>{t("settings.aiApiKey")}<input type="password" value={form.aiApiKey} onChange={(event) => set("aiApiKey", event.target.value)} placeholder={t("settings.aiKeyPlaceholder")} /></label>
-        <label>{t("settings.aiBaseUrl")}<input value={form.aiBaseUrl} onChange={(event) => set("aiBaseUrl", event.target.value)} /></label>
-        <label>{t("settings.aiModel")}<input value={form.aiModel} onChange={(event) => set("aiModel", event.target.value)} /></label>
-        <label>{t("settings.refreshTime")}<input type="time" value={form.refreshTime} onChange={(event) => set("refreshTime", event.target.value)} /></label>
-        <label>{t("settings.proxyUrl")}<input value={form.proxyUrl} onChange={(event) => set("proxyUrl", event.target.value)} /></label>
-        <label>{t("settings.timezone")}<input value={form.timezone} onChange={(event) => set("timezone", event.target.value)} /></label>
-        <label>{t("settings.cacheTtlHours")}<input type="number" min={1} max={72} value={form.cacheTtlHours} onChange={(event) => setForm((current) => ({ ...current, cacheTtlHours: Number(event.target.value) }))} /></label>
-        <label>{t("settings.maxReposPerWindow")}<input type="number" min={20} max={500} value={form.maxReposPerWindow} onChange={(event) => setForm((current) => ({ ...current, maxReposPerWindow: Number(event.target.value) }))} /></label>
-        <label>{t("settings.backupPath")}<input value={form.backupPath} onChange={(event) => set("backupPath", event.target.value)} placeholder={t("settings.backupPathPlaceholder")} /></label>
-        <label>{t("settings.storagePath")}<input value={form.storagePath} readOnly /></label>
+
+      <div className="settings-section">
+        <h3>{t("settings.section.sources")}</h3>
+        <p>{t("settings.section.sourcesHelp")}</p>
+        <div className="settings-grid">
+          <SettingsField label={t("settings.githubToken")} help={t("settings.help.githubToken")}><input type="password" value={form.githubToken} onChange={(event) => set("githubToken", event.target.value)} placeholder={t("settings.githubTokenPlaceholder")} /></SettingsField>
+          <SettingsField label={t("settings.bigQueryProjectId")} help={t("settings.help.bigQuery")}><input value={form.bigQueryProjectId} onChange={(event) => set("bigQueryProjectId", event.target.value)} /></SettingsField>
+          <SettingsField label={t("settings.proxyUrl")} help={t("settings.help.proxy")}><input value={form.proxyUrl} onChange={(event) => set("proxyUrl", event.target.value)} /></SettingsField>
+          <SettingsField label={t("settings.cacheTtlHours")} help={t("settings.help.cacheTtl")}><input type="number" min={1} max={72} value={form.cacheTtlHours} onChange={(event) => setNumber("cacheTtlHours", event.target.value)} /></SettingsField>
+          <SettingsField label={t("settings.maxReposPerWindow")} help={t("settings.help.maxRepos")}><input type="number" min={20} max={500} value={form.maxReposPerWindow} onChange={(event) => setNumber("maxReposPerWindow", event.target.value)} /></SettingsField>
+        </div>
       </div>
-      <div className="switch-row">
-        <label><input type="checkbox" checked={form.backgroundRefresh} onChange={(event) => set("backgroundRefresh", event.target.checked)} /> {t("settings.backgroundRefresh")}</label>
-        <label><input type="checkbox" checked={form.startAtLogin} onChange={(event) => set("startAtLogin", event.target.checked)} /> {t("settings.startAtLogin")}</label>
-        <label><input type="checkbox" checked={form.enableNotifications} onChange={(event) => set("enableNotifications", event.target.checked)} /> {t("settings.notifications")}</label>
+
+      <div className="settings-section">
+        <h3>{t("settings.section.ai")}</h3>
+        <p>{t("settings.section.aiHelp")}</p>
+        <div className="settings-grid">
+          <SettingsField label={t("settings.aiApiKey")} help={t("settings.help.aiKey")}><input type="password" value={form.aiApiKey} onChange={(event) => set("aiApiKey", event.target.value)} placeholder={t("settings.aiKeyPlaceholder")} /></SettingsField>
+          <SettingsField label={t("settings.aiBaseUrl")} help={t("settings.help.aiBaseUrl")}><input value={form.aiBaseUrl} onChange={(event) => set("aiBaseUrl", event.target.value)} /></SettingsField>
+          <SettingsField label={t("settings.aiModel")} help={t("settings.help.aiModel")}><input value={form.aiModel} onChange={(event) => set("aiModel", event.target.value)} /></SettingsField>
+        </div>
       </div>
+
+      <div className="settings-section">
+        <h3>{t("settings.section.refresh")}</h3>
+        <p>{t("settings.section.refreshHelp")}</p>
+        <div className="settings-grid">
+          <SettingsField label={t("settings.refreshTime")} help={t("settings.help.refreshTime")}><input type="time" value={form.refreshTime} onChange={(event) => set("refreshTime", event.target.value)} /></SettingsField>
+          <SettingsField label={t("settings.timezone")} help={t("settings.help.timezone")}><input value={form.timezone} onChange={(event) => set("timezone", event.target.value)} /></SettingsField>
+        </div>
+        <div className="switch-row">
+          <label><input type="checkbox" checked={form.backgroundRefresh} onChange={(event) => set("backgroundRefresh", event.target.checked)} /> {t("settings.backgroundRefresh")}</label>
+          <label><input type="checkbox" checked={form.startAtLogin} onChange={(event) => set("startAtLogin", event.target.checked)} /> {t("settings.startAtLogin")}</label>
+          <label><input type="checkbox" checked={form.enableNotifications} onChange={(event) => set("enableNotifications", event.target.checked)} /> {t("settings.notifications")}</label>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <h3>{t("settings.section.storage")}</h3>
+        <p>{t("settings.section.storageHelp")}</p>
+        <div className="settings-grid">
+          <SettingsField label={t("settings.storagePath")} help={t("settings.help.storagePath")}><input value={form.storagePath} readOnly /></SettingsField>
+          <SettingsField label={t("settings.backupPath")} help={t("settings.help.backupPath")}><input value={form.backupPath} onChange={(event) => set("backupPath", event.target.value)} placeholder={t("settings.backupPathPlaceholder")} /></SettingsField>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <h3>{t("settings.section.project")}</h3>
+        <div className="settings-status-grid">
+          <div className="settings-status-card"><span>{t("settings.appVersion")}</span><strong>{APP_VERSION}</strong><small>{t("settings.versionLocked")}</small></div>
+          <div className="settings-status-card"><span>{t("settings.releaseOutput")}</span><strong>release/</strong><small>{t("settings.releaseOutputHelp")}</small></div>
+          <div className="settings-status-card"><span>{t("settings.storagePath")}</span><strong>{form.storagePath || t("common.localSQLite")}</strong><small>{t("settings.localFirst")}</small></div>
+        </div>
+      </div>
+
       {connectionMessage && <p className="settings-message">{connectionMessage}</p>}
       <div className="settings-actions">
         <button className="icon-button" type="button" onClick={() => void testConnection("github")}>
@@ -1154,10 +1325,10 @@ function SettingsPanel({ settings, onSaved }: { settings: Settings; onSaved: (se
         }}>
           <Download size={15} /> {t("action.backupData")}
         </button>
+        <button className="icon-button primary" type="button" onClick={() => void save()}>
+          <Save size={15} /> {t("action.saveSettings")}
+        </button>
       </div>
-      <button className="icon-button primary" onClick={async () => onSaved(await api.updateSettings(form))}>
-        <Save size={15} /> {t("action.saveSettings")}
-      </button>
     </section>
   );
 }
@@ -1244,7 +1415,17 @@ function RepoDrawer({ record, compareSelected, onOpenExternal, onToggleCollectio
         <h3>{t("drawer.classification")}</h3>
         <TagPill label={`${categoryLabel(record.classification.primaryCategory)} / ${subcategoryLabel(record.classification.secondaryCategory)}`} />
         <p style={{ marginTop: 6 }}>{record.classification.reason}</p>
+        <div className="insight-lines">
+          <MetricLine label={t("drawer.learningValue")} value={record.classification.learningValue} />
+          <MetricLine label={t("drawer.audience")} value={record.classification.audience} />
+        </div>
         <div className="tag-row">{record.classification.tags.map((tag) => <TagPill key={tag} label={tag} />)}</div>
+        {record.classification.evidence.length > 0 && (
+          <div className="tag-row compact">{record.classification.evidence.map((item) => <TagPill key={item} label={item} />)}</div>
+        )}
+        {record.classification.risks.length > 0 && (
+          <ul className="risk-list">{record.classification.risks.map((risk) => <li key={risk}>{risk}</li>)}</ul>
+        )}
       </div>
 
       <div className="drawer-block">
@@ -1353,6 +1534,19 @@ function maxGrowth(record: RepoRecord): number {
     .filter((item) => item.window === record.ranking.window)
     .map((item) => item.growth ?? 0);
   return Math.max(...rankingGrowth, ...windowGrowth, 0);
+}
+
+function collectTopTags(records: RepoRecord[], limit: number): string[] {
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    const tags = [...(record.repo.topics ?? []), ...(record.classification?.tags ?? [])];
+    for (const tag of tags) {
+      const normalized = tag.trim();
+      if (!normalized) continue;
+      counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+    }
+  }
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, limit).map(([tag]) => tag);
 }
 
 function formatNumber(value: number, locale: "en" | "zh" = "en"): string {

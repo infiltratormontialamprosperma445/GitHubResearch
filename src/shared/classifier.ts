@@ -17,9 +17,10 @@ const AI_RULES: RuleMatch[] = [
     primary: "AI",
     secondary: "Coding Agents",
     keywords: [
-      "claude code", "codex", "coding agent", "code agent", "ai coding", "devin",
+      "claude code", "claude-code", "chatgpt cli", "codex", "codex cli", "coding agent", "code agent", "ai coding", "devin",
       "swe-agent", "swe-bench", "code generation", "code assistant", "ai developer",
-      "ide agent", "cursor", "windsurf", "aider", "continue dev", "codeium"
+      "software engineering agent", "terminal agent", "ide agent", "cursor", "windsurf", "aider", "continue dev",
+      "openhands", "open hands", "cline", "roo code", "roo-code", "opencode", "plandex", "codeium"
     ],
     confidence: 0.93
   },
@@ -28,16 +29,28 @@ const AI_RULES: RuleMatch[] = [
     secondary: "Skills/Plugins",
     keywords: [
       "skill", "skills", "plugin", "plugins", "tool plugin", "extension",
-      "ai plugin", "agent skill", "mcp plugin", "tool extension"
+      "ai plugin", "agent skill", "agent skills", "mcp plugin", "tool extension",
+      "slash command", "slash-command", "custom command", "command palette"
     ],
     confidence: 0.88
+  },
+  {
+    primary: "AI",
+    secondary: "Prompts/Workflows",
+    keywords: [
+      "prompt library", "prompt manager", "prompt workflow", "prompt engineering",
+      "prompt template", "prompt templates", "system prompt", "chatgpt prompts",
+      "ai prompts", "llm prompts", "promptflow", "prompt flow"
+    ],
+    confidence: 0.87
   },
   {
     primary: "AI",
     secondary: "MCP/Tools",
     keywords: [
       "mcp", "model context protocol", "tool calling", "tools server", "agent tool",
-      "mcp server", "mcp client", "function calling", "tool use", "tool-use"
+      "mcp server", "mcp-server", "mcp client", "mcp-client", "function calling", "tool use", "tool-use",
+      "computer use", "tool server", "tool adapter"
     ],
     confidence: 0.91
   },
@@ -47,7 +60,7 @@ const AI_RULES: RuleMatch[] = [
     keywords: [
       "agent framework", "multi-agent", "workflow agent", "autonomous agent", "agentic",
       "agent orchestration", "agent chain", "langgraph", "autogen", "crewai",
-      "agent swarm", "agent collaboration", "agent pipeline"
+      "openai agents sdk", "openai agents", "semantic kernel", "agent swarm", "agent collaboration", "agent pipeline"
     ],
     confidence: 0.9
   },
@@ -114,8 +127,9 @@ const AI_RULES: RuleMatch[] = [
     primary: "AI",
     secondary: "LLM Apps",
     keywords: [
-      "llm", "chatbot", "openai", "anthropic", "gemini", "prompt", "copilot",
-      "gpt", "claude", "chatgpt", "langchain", "llama", "mistral", "deepseek",
+      "llm", "chatbot", "openai", "anthropic", "gemini", "copilot",
+      "gpt", "claude", "chatgpt", "custom gpt", "gpts", "assistants api", "assistant api",
+      "responses api", "openai compatible", "langchain", "llama", "mistral", "deepseek",
       "qwen", "phi model", "small language model", "on-device llm"
     ],
     confidence: 0.8
@@ -253,7 +267,13 @@ function normalizeAiSecondary(primary: PrimaryCategory, secondary: string): stri
 
 function learningValueFor(primary: PrimaryCategory, secondary: string, repo: Repository): string {
   if (primary === "AI") {
-    return `Study how ${repo.name} approaches ${secondary.toLowerCase()} patterns, project structure, and user-facing abstractions.`;
+    const name = repo.name || repo.fullName;
+    if (secondary === "Coding Agents") return `Study how ${name} structures agentic coding loops, terminal/IDE tool use, and repository editing safeguards.`;
+    if (secondary === "Prompts/Workflows") return `Review ${name} for reusable prompt patterns, evaluation flows, and workflow templates.`;
+    if (secondary === "MCP/Tools") return `Study how ${name} exposes tools, context, and permissions to AI clients through protocol-style integrations.`;
+    if (secondary === "Agent Frameworks") return `Study how ${name} orchestrates roles, memory, tools, and multi-agent control flow.`;
+    if (secondary === "Model Serving") return `Review ${name} for deployment, routing, batching, and local/hosted inference tradeoffs.`;
+    return `Study how ${name} approaches ${secondary.toLowerCase()} patterns, project structure, and user-facing abstractions.`;
   }
   if (primary === "Developer Tools") {
     return "Useful for understanding developer ergonomics, command design, and automation workflows.";
@@ -265,7 +285,12 @@ function learningValueFor(primary: PrimaryCategory, secondary: string, repo: Rep
 }
 
 function audienceFor(primary: PrimaryCategory, secondary: string): string {
-  if (primary === "AI") return `AI builders, agent platform developers, and engineers tracking ${secondary}.`;
+  if (primary === "AI") {
+    if (secondary === "Coding Agents") return "AI coding tool builders, CLI/IDE extension authors, and software engineering automation teams.";
+    if (secondary === "Prompts/Workflows") return "Prompt engineers, AI product builders, and teams standardizing reusable LLM workflows.";
+    if (secondary === "MCP/Tools") return "Agent platform developers, tool integration authors, and local-first AI workflow builders.";
+    return `AI builders, agent platform developers, and engineers tracking ${secondary}.`;
+  }
   if (primary === "Frontend/UI") return "Frontend engineers and product builders.";
   if (primary === "Security") return "Security engineers and platform teams.";
   return "Developers collecting high-signal open source projects.";

@@ -9,6 +9,7 @@ import {
   JobStep,
   ManualClassificationRule,
   PRIMARY_CATEGORIES,
+  AI_SUBCATEGORIES,
   RefreshResult,
   RefreshJob,
   RepoFilters,
@@ -35,6 +36,10 @@ import { DiscoveredRepository, SourceAdapter } from "../sources/types.js";
 
 const SECRET_KEYS = new Set(["githubToken", "aiApiKey"]);
 
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 /**
  * Shape of the progress callback passed to refresh().
  */
@@ -44,6 +49,102 @@ export interface RefreshProgressCallback {
   total: number;
   label: string;
   repoCount: number;
+}
+
+function topTags(records: RepoRecord[], limit = 5): string[] {
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    for (const tag of record.classification?.tags ?? []) {
+      const normalized = tag.trim();
+      if (!normalized) continue;
+      counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+    }
+  }
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, limit).map(([tag]) => tag);
+}
+
+function topTopicHighlights(records: RepoRecord[]): DashboardSummary["topicHighlights"] {
+  const counts = new Map<string, { count: number; sampleRepo?: string }>();
+  for (const record of records) {
+    const topics = [...(record.repo.topics ?? []), ...(record.classification?.tags ?? [])];
+    for (const topic of topics) {
+      const label = topic.trim();
+      if (!label) continue;
+      const existing = counts.get(label) ?? { count: 0, sampleRepo: record.repo.fullName };
+      counts.set(label, { count: existing.count + 1, sampleRepo: existing.sampleRepo ?? record.repo.fullName });
+    }
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 10)
+    .map(([label, value]) => ({ label, count: value.count, sampleRepo: value.sampleRepo }));
+}
+
+function buildDashboardInsights(
+  hotRepos: RepoRecord[],
+  aiFocus: DashboardSummary["aiFocus"],
+  anomalies: RepoRecord[],
+  health: SourceHealth[],
+  latestJob?: RefreshJob
+): DashboardSummary["topInsights"] {
+  const insights: DashboardSummary["topInsights"] = [];
+  const top = hotRepos[0];
+  if (top) {
+    insights.push({
+      id: "top-growth",
+      kind: "growth",
+      title: `Top focus: ${top.repo.fullName}`,
+      description: top.ranking?.explanation?.[0] ?? top.repo.description ?? "Highest-ranked repository in the current window.",
+      severity: "success",
+      repoId: top.repo.id,
+      actionModule: "explorer"
+    });
+  }
+  const focus = aiFocus.find((item) => ["Coding Agents", "MCP/Tools", "Skills/Plugins", "Prompts/Workflows", "LLM Apps"].includes(item.subcategory)) ?? aiFocus[0];
+  if (focus) {
+    insights.push({
+      id: `ai-focus-${focus.subcategory}`,
+      kind: "topic",
+      title: `${focus.subcategory}: ${focus.count} projects`,
+      description: focus.topRepo ? `Leading project: ${focus.topRepo.repo.fullName}. Tags: ${focus.topTags.slice(0, 3).join(", ") || "high-signal AI"}.` : "AI focus area is active.",
+      severity: "info",
+      repoId: focus.topRepo?.repo.id,
+      actionModule: "categories"
+    });
+  }
+  const degraded = health.filter((source) => source.status === "degraded" || source.status === "disabled");
+  if (degraded[0]) {
+    insights.push({
+      id: `source-${degraded[0].id}`,
+      kind: "source",
+      title: `${degraded[0].label} needs attention`,
+      description: degraded[0].message,
+      severity: "warning",
+      actionModule: "sources"
+    });
+  }
+  if (latestJob) {
+    insights.push({
+      id: "refresh-delta",
+      kind: "refresh",
+      title: `Latest refresh: ${latestJob.status}`,
+      description: `${latestJob.discovered} discovered, ${latestJob.classified} classified, ${latestJob.warnings.length} warnings.`,
+      severity: latestJob.status === "success" ? "success" : latestJob.status === "partial" ? "warning" : "info",
+      actionModule: "dashboard"
+    });
+  }
+  if (anomalies[0]) {
+    insights.push({
+      id: `risk-${anomalies[0].repo.id}`,
+      kind: "risk",
+      title: `Watch anomaly: ${anomalies[0].repo.fullName}`,
+      description: anomalies[0].ranking?.anomalyReasons?.[0] ?? "Growth or risk score deserves manual review.",
+      severity: "warning",
+      repoId: anomalies[0].repo.id,
+      actionModule: "explorer"
+    });
+  }
+  return insights.slice(0, 5);
 }
 
 export class IntelligenceService {
@@ -64,6 +165,9 @@ export class IntelligenceService {
     const hotRepos = this.db.listRepos({ window: "daily", limit: 8 }) ?? [];
     const fallbackHot = hotRepos.length ? hotRepos : (this.db.listRepos({ window: "weekly", limit: 8 }) ?? []);
     const allMonthly = this.db.listRepos({ window: "monthly", limit: 500 }) ?? [];
+    const health = this.db.sourceHealth();
+    const latestJob = this.db.latestRefreshJob();
+    const anomalies = allMonthly.filter((record) => (record.ranking?.riskPenalty ?? 0) > 0 || (record.ranking?.growthScore ?? 0) > 38).slice(0, 8);
     const categoryLeaders = PRIMARY_CATEGORIES.map((category) => {
       const repos = allMonthly.filter((record) => record.classification?.primaryCategory === category);
       return {
@@ -72,16 +176,39 @@ export class IntelligenceService {
         topRepo: repos[0]
       };
     }).filter((item) => item.count > 0);
+    const aiFocus = AI_SUBCATEGORIES.map((subcategory) => {
+      const items = allMonthly.filter((record) => record.classification?.secondaryCategory === subcategory);
+      return {
+        subcategory,
+        count: items.length,
+        topRepo: items[0],
+        topTags: topTags(items)
+      };
+    }).filter((item) => item.count > 0).slice(0, 8);
+    const topicHighlights = topTopicHighlights(allMonthly);
+    const topInsights = buildDashboardInsights(fallbackHot, aiFocus, anomalies, health, latestJob);
     return {
       updatedAt: new Date().toISOString(),
       totalRepos: this.db.countRepos(),
       totalSources: this.adapters.length,
-      health: this.db.sourceHealth(),
+      health,
       hotRepos: fallbackHot,
       categoryLeaders,
-      anomalies: allMonthly.filter((record) => (record.ranking?.riskPenalty ?? 0) > 0 || (record.ranking?.growthScore ?? 0) > 38).slice(0, 8),
-      latestJob: this.db.latestRefreshJob(),
-      rateLimits: this.db.rateLimits()
+      anomalies,
+      latestJob,
+      rateLimits: this.db.rateLimits(),
+      topInsights,
+      topicHighlights,
+      aiFocus,
+      refreshDelta: {
+        status: latestJob?.status ?? "pending",
+        discovered: latestJob?.discovered ?? 0,
+        enriched: latestJob?.enriched ?? 0,
+        classified: latestJob?.classified ?? 0,
+        scored: latestJob?.scored ?? 0,
+        warnings: latestJob?.warnings.length ?? 0,
+        completedAt: latestJob?.completedAt
+      }
     };
   }
 
@@ -221,6 +348,9 @@ export class IntelligenceService {
               adapterEnriched += counts.enriched;
               adapterClassified += counts.classified;
               adapterScored += counts.scored;
+              if ((itemIndex + 1) % 12 === 0) {
+                await yieldToEventLoop();
+              }
             } catch (ingestError) {
               const msg = ingestError instanceof Error ? ingestError.message : String(ingestError);
               console.warn(`[ingest] Skipping ${item.repo?.fullName ?? "unknown"}: ${msg}`);
@@ -447,47 +577,26 @@ export class IntelligenceService {
    * Returns scored and sorted search results with highlights.
    */
   async search(query: string, filters: SearchFilters, sort: SortOption): Promise<SearchResult[]> {
+    const normalizedQuery = query.trim();
     const windowType = filters.windowType ?? "monthly";
+
+    if (normalizedQuery) {
+      return this.db.searchRepos(normalizedQuery, { ...filters, windowType }, sort);
+    }
+
     const repos = this.db.listRepos({ window: windowType, limit: 1000 }) ?? [];
+    const results = repos
+      .filter((repo) => !filters.primaryCategory || filters.primaryCategory === "All" || repo.classification?.primaryCategory === filters.primaryCategory)
+      .filter((repo) => !filters.language || filters.language === "All" || repo.repo.language === filters.language)
+      .filter((repo) => !filters.minStars || repo.repo.stars >= filters.minStars)
+      .filter((repo) => !filters.isFavorited || Boolean(repo.collection))
+      .slice(0, 100)
+      .map((repo) => this.toSearchResult(repo, normalizedQuery));
 
-    if (!query && !filters.primaryCategory && !filters.language && !filters.minStars && !filters.isFavorited) {
-      // No query and no filters — return top repos by default sort
-      return repos.slice(0, 100).map((r) => this.toSearchResult(r, query));
-    }
-
-    const queryLower = query.toLowerCase().trim();
-    const results: SearchResult[] = [];
-
-    for (const repo of repos) {
-      // Apply search query matching
-      if (queryLower) {
-        const fullNameMatch = repo.repo.fullName.toLowerCase().includes(queryLower);
-        const descMatch = (repo.repo.description ?? "").toLowerCase().includes(queryLower);
-        const topicMatch = (repo.repo.topics ?? []).some((t) => t.toLowerCase().includes(queryLower));
-
-        if (!fullNameMatch && !descMatch && !topicMatch) continue;
-      }
-
-      // Apply additional filters
-      if (filters.primaryCategory && repo.classification?.primaryCategory !== filters.primaryCategory) continue;
-      if (filters.language && repo.repo.language !== filters.language) continue;
-      if (filters.minStars && repo.repo.stars < filters.minStars) continue;
-      if (filters.isFavorited && !repo.collection) continue;
-
-      results.push(this.toSearchResult(repo, query));
-    }
-
-    // Sort results
     switch (sort) {
+      case "score":
       case "relevance":
         results.sort((a, b) => b.relevanceScore - a.relevanceScore);
-        break;
-      case "score":
-        results.sort((a, b) => {
-          const scoreA = repos.find((r) => r.repo.id === a.repoId)?.ranking?.score ?? 0;
-          const scoreB = repos.find((r) => r.repo.id === b.repoId)?.ranking?.score ?? 0;
-          return scoreB - scoreA;
-        });
         break;
       case "stars":
         results.sort((a, b) => b.stars - a.stars);
@@ -496,11 +605,6 @@ export class IntelligenceService {
         results.sort((a, b) => b.starsToday - a.starsToday);
         break;
       case "recent":
-        results.sort((a, b) => {
-          const pushedA = repos.find((r) => r.repo.id === a.repoId)?.repo.pushedAt ?? "";
-          const pushedB = repos.find((r) => r.repo.id === b.repoId)?.repo.pushedAt ?? "";
-          return pushedB.localeCompare(pushedA);
-        });
         break;
     }
 
@@ -606,6 +710,7 @@ export class IntelligenceService {
     // --- Batch 3: ranking + notifications ---
     const observations = this.db.getObservations(repo.id).filter((sourceObservation) => sourceObservation.window === trendWindow);
     this.db.upsertRanking(scoreRepository(repo, classification, observations, trendWindow));
+    this.db.syncSearchIndexForRepo(repo.id);
     this.notifyMatchingAlerts(repo, classification, settings);
     return { enriched: 1, classified: existing?.overridden ? 0 : 1, scored: 1 };
   }

@@ -267,19 +267,11 @@ export default function CommandPalette({ open, onClose, onSelect }: CommandPalet
             >
               <div className="command-palette-item-info">
                 <div className="command-palette-item-name">
-                  {item.highlights?.fullName ? (
-                    <HighlightText text={item.fullName} highlight={query} />
-                  ) : (
-                    item.fullName
-                  )}
+                  <HighlightSnippet snippet={item.highlights?.fullName} fallback={item.fullName} />
                 </div>
                 {item.description && (
                   <div className="command-palette-item-desc">
-                    {item.highlights?.description ? (
-                      <HighlightText text={item.description} highlight={query} />
-                    ) : (
-                      item.description
-                    )}
+                    <HighlightSnippet snippet={item.highlights?.description} fallback={item.description} />
                   </div>
                 )}
               </div>
@@ -331,21 +323,25 @@ export default function CommandPalette({ open, onClose, onSelect }: CommandPalet
 }
 
 /**
- * Highlight matching substrings in text.
+ * Render FTS snippets safely without injecting HTML.
  */
-function HighlightText({ text, highlight }: { text: string; highlight: string }) {
-  if (!highlight.trim()) return <>{text}</>;
-  const regex = new RegExp(`(${escapeRegex(highlight)})`, "gi");
-  const parts = text.split(regex);
+function HighlightSnippet({ snippet, fallback }: { snippet?: string; fallback: string }) {
+  const source = snippet || fallback;
+  const parts = source.split(/(<mark>|<\/mark>)/g).filter(Boolean);
+  let marked = false;
   return (
     <>
-      {parts.map((part, index) =>
-        regex.test(part) ? <mark key={index}>{part}</mark> : <span key={index}>{part}</span>
-      )}
+      {parts.map((part, index) => {
+        if (part === "<mark>") {
+          marked = true;
+          return null;
+        }
+        if (part === "</mark>") {
+          marked = false;
+          return null;
+        }
+        return marked ? <mark key={index}>{part}</mark> : <span key={index}>{part}</span>;
+      })}
     </>
   );
-}
-
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

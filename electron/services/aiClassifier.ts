@@ -51,6 +51,7 @@ export async function maybeRefineClassification(
                 "Coding Agents",
                 "Agent Frameworks",
                 "Skills/Plugins",
+                "Prompts/Workflows",
                 "MCP/Tools",
                 "RAG/Knowledge",
                 "LLM Apps",

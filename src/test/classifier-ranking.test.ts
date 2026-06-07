@@ -28,6 +28,32 @@ describe("classifier", () => {
     expect(["MCP/Tools", "Skills/Plugins", "Coding Agents"]).toContain(result.secondaryCategory);
     expect(result.confidence).toBeGreaterThan(0.8);
   });
+
+  it("recognizes coding agents, prompts, OpenAI, ChatGPT, and MCP projects", () => {
+    const cases: Array<{ name: string; description: string; topics: string[]; expected: string }> = [
+      { name: "claude-code-tools", description: "Claude Code terminal coding agent with slash commands.", topics: ["claude-code", "coding-agent", "cli"], expected: "Coding Agents" },
+      { name: "openai-agents-sdk", description: "OpenAI Agents SDK examples for multi-agent workflows.", topics: ["openai", "agents", "sdk"], expected: "Agent Frameworks" },
+      { name: "chatgpt-cli", description: "ChatGPT CLI coding agent for terminal agent workflows.", topics: ["chatgpt", "cli", "llm", "coding-agent"], expected: "Coding Agents" },
+      { name: "mcp-server-example", description: "MCP server with tool calling and computer use adapters.", topics: ["mcp-server", "tools"], expected: "MCP/Tools" },
+      { name: "prompt-library", description: "System prompt templates and prompt workflow manager.", topics: ["prompt-library", "prompts"], expected: "Prompts/Workflows" },
+      { name: "aider-codex-opencode", description: "Aider, Codex, and OpenHands style software engineering agent.", topics: ["aider", "codex", "openhands"], expected: "Coding Agents" }
+    ];
+
+    for (const item of cases) {
+      const result = classifyRepository({
+        ...baseRepo,
+        id: `github:example/${item.name}`,
+        fullName: `example/${item.name}`,
+        name: item.name,
+        description: item.description,
+        topics: item.topics,
+        readmeExcerpt: item.description
+      });
+      expect(result.primaryCategory, item.name).toBe("AI");
+      expect(result.secondaryCategory, item.name).toBe(item.expected);
+      expect(result.reason, item.name).toContain("Matched");
+    }
+  });
 });
 
 describe("ranking", () => {

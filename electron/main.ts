@@ -11,7 +11,8 @@ import {
   TrendWindow,
   SearchFilters,
   SortOption,
-  SourceHealth
+  SourceHealth,
+  RefreshProgress
 } from "../src/shared/types.js";
 import type { MainToWorkerMessage, WorkerToMainMessage } from "../src/shared/workerProtocol.js";
 import { AppDatabase } from "./services/database.js";
@@ -29,7 +30,7 @@ let workerRestartAttempts = 0;
 let fallbackServicePromise: Promise<{ db: AppDatabase; service: IntelligenceService }> | undefined;
 let localRefreshAbort: AbortController | undefined;
 
-const ENABLE_UTILITY_WORKER = process.env.STAR_INTEL_ENABLE_WORKER === "1";
+const ENABLE_UTILITY_WORKER = process.env.STAR_INTEL_DISABLE_WORKER !== "1";
 const MAX_WORKER_RESTARTS = 2;
 const NON_IDEMPOTENT_WORKER_METHODS = new Set([
   "toggleCollection",
@@ -45,8 +46,10 @@ const NON_IDEMPOTENT_WORKER_METHODS = new Set([
 // when the corresponding QUERY_RESULT or QUERY_ERROR arrives.
 const pendingQueries = new Map<string, { resolve: (v: any) => void; reject: (e: Error) => void }>();
 
-// When a refresh is in progress, the IPC handler awaits this Promise.
-let refreshPromise: Promise<any> | null = null;
+const REFRESH_PROGRESS_THROTTLE_MS = 150;
+let lastProgressSentAt = 0;
+let pendingProgress: RefreshProgress | undefined;
+let progressFlushTimer: NodeJS.Timeout | undefined;
 
 // Catch internal Electron/Node.js assertion errors (e.g. IPC stream AssertionError)
 // instead of crashing with a dialog
@@ -72,7 +75,7 @@ async function bootstrap(): Promise<void> {
   if (ENABLE_UTILITY_WORKER) {
     startWorker();
   } else {
-    console.log("[main] Utility worker disabled; using main-process data service.");
+    console.log("[main] Utility worker disabled by STAR_INTEL_DISABLE_WORKER=1; using main-process data service.");
   }
   registerIpc();
   createWindow();
@@ -193,58 +196,96 @@ function startWorker(): void {
   });
 }
 
+function clearProgressTimer(): void {
+  if (progressFlushTimer) {
+    clearTimeout(progressFlushTimer);
+    progressFlushTimer = undefined;
+  }
+}
+
+function sendRefreshProgress(progress: RefreshProgress): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send("refresh:progress", progress);
+  lastProgressSentAt = Date.now();
+}
+
+function sendRefreshProgressImmediate(progress: RefreshProgress): void {
+  pendingProgress = undefined;
+  clearProgressTimer();
+  sendRefreshProgress(progress);
+}
+
+function sendRefreshProgressThrottled(progress: RefreshProgress): void {
+  const terminal = progress.phase === "done" || progress.phase === "error" || progress.phase === "cancelled";
+  if (terminal) {
+    sendRefreshProgressImmediate(progress);
+    return;
+  }
+
+  const elapsed = Date.now() - lastProgressSentAt;
+  if (elapsed >= REFRESH_PROGRESS_THROTTLE_MS) {
+    pendingProgress = undefined;
+    clearProgressTimer();
+    sendRefreshProgress(progress);
+    return;
+  }
+
+  pendingProgress = progress;
+  if (!progressFlushTimer) {
+    progressFlushTimer = setTimeout(() => {
+      progressFlushTimer = undefined;
+      if (pendingProgress) {
+        const next = pendingProgress;
+        pendingProgress = undefined;
+        sendRefreshProgress(next);
+      }
+    }, REFRESH_PROGRESS_THROTTLE_MS - elapsed);
+  }
+}
+
 function handleWorkerMessage(msg: WorkerToMainMessage): void {
   switch (msg.type) {
     case "REFRESH_PROGRESS":
-      // Forward progress events to the renderer process
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send("refresh:progress", {
-          phase: msg.phase,
-          done: msg.done,
-          total: msg.total,
-          label: msg.label,
-          repoCount: msg.repoCount
-        });
-      }
+      sendRefreshProgressThrottled({
+        phase: msg.phase as RefreshProgress["phase"],
+        done: msg.done,
+        total: msg.total,
+        label: msg.label,
+        repoCount: msg.repoCount
+      });
       break;
 
     case "REFRESH_DONE":
       isRefreshing = false;
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send("refresh:progress", {
-          phase: "done",
-          done: msg.stats.total,
-          total: msg.stats.total,
-          label: "Complete",
-          repoCount: msg.stats.total
-        });
-      }
+      sendRefreshProgressImmediate({
+        phase: "done",
+        done: msg.stats.total,
+        total: msg.stats.total,
+        label: "Complete",
+        repoCount: msg.stats.total
+      });
       break;
 
     case "REFRESH_ERROR":
       isRefreshing = false;
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send("refresh:progress", {
-          phase: "error",
-          done: 0,
-          total: 0,
-          label: msg.error,
-          repoCount: 0
-        });
-      }
+      sendRefreshProgressImmediate({
+        phase: "error",
+        done: 0,
+        total: 0,
+        label: msg.error,
+        repoCount: 0
+      });
       break;
 
     case "REFRESH_CANCELLED":
       isRefreshing = false;
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send("refresh:progress", {
-          phase: "cancelled",
-          done: 0,
-          total: 0,
-          label: "Refresh cancelled",
-          repoCount: 0
-        });
-      }
+      sendRefreshProgressImmediate({
+        phase: "cancelled",
+        done: 0,
+        total: 0,
+        label: "Refresh cancelled",
+        repoCount: 0
+      });
       break;
 
     case "QUERY_RESULT": {
@@ -396,9 +437,7 @@ async function refreshLocal(windows: string[]): Promise<any> {
   localRefreshAbort = new AbortController();
   try {
     return await service.refresh(trendWindow, (progress) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send("refresh:progress", progress);
-      }
+      sendRefreshProgressThrottled(progress as RefreshProgress);
     }, localRefreshAbort.signal);
   } finally {
     localRefreshAbort = undefined;

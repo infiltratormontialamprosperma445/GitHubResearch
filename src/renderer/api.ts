@@ -134,7 +134,38 @@ export const api: AppApi = window.githubIntel ?? {
       ],
       anomalies: [fallbackRecords[0]],
       latestJob: undefined,
-      rateLimits: []
+      rateLimits: [],
+      topInsights: [
+        {
+          id: "preview-ai-focus",
+          kind: "topic",
+          title: "MCP and agent tooling are ready to explore",
+          description: "Preview data highlights MCP servers, LangChain, and local model serving.",
+          severity: "info",
+          repoId: fallbackRecords[0]?.repo.id,
+          actionModule: "explorer"
+        }
+      ],
+      topicHighlights: [
+        { label: "mcp", count: 1, sampleRepo: fallbackRecords[0]?.repo.fullName },
+        { label: "llm", count: 2, sampleRepo: fallbackRecords[1]?.repo.fullName }
+      ],
+      aiFocus: [
+        {
+          subcategory: "MCP/Tools",
+          count: 1,
+          topRepo: fallbackRecords[0],
+          topTags: ["mcp", "tools", "agents"]
+        }
+      ],
+      refreshDelta: {
+        status: "pending",
+        discovered: 0,
+        enriched: 0,
+        classified: 0,
+        scored: 0,
+        warnings: 0
+      }
     };
   },
   async listRepos(filters) {
@@ -282,11 +313,13 @@ export const apiV2: AppApiV2 = (window.githubIntel as AppApiV2 | undefined) ?? {
   async cancelRefresh(): Promise<void> {
     // no-op in fallback
   },
-  onRefreshProgress(_callback: (data: RefreshProgress) => void): void {
+  onRefreshProgress(_callback: (data: RefreshProgress) => void): () => void {
     // no-op in fallback
+    return () => {};
   },
-  onSummaryToken(_callback: (data: { repoId: string; token: string }) => void): void {
+  onSummaryToken(_callback: (data: { repoId: string; token: string }) => void): () => void {
     // no-op in fallback
+    return () => {};
   },
   async getCategoryCounts(_window: TrendWindow): Promise<CategoryCounts> {
     const counts: CategoryCounts = {};

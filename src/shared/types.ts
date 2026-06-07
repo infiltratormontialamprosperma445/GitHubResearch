@@ -19,6 +19,7 @@ export type AiSubcategory =
   | "Coding Agents"
   | "Agent Frameworks"
   | "Skills/Plugins"
+  | "Prompts/Workflows"
   | "MCP/Tools"
   | "RAG/Knowledge"
   | "LLM Apps"
@@ -272,6 +273,39 @@ export interface RepoFilters {
   limit?: number;
 }
 
+export interface DashboardInsight {
+  id: string;
+  kind: "growth" | "topic" | "source" | "risk" | "refresh";
+  title: string;
+  description: string;
+  severity: "info" | "success" | "warning" | "danger";
+  repoId?: string;
+  actionModule?: string;
+}
+
+export interface TopicHighlight {
+  label: string;
+  count: number;
+  sampleRepo?: string;
+}
+
+export interface AiFocusArea {
+  subcategory: string;
+  count: number;
+  topRepo?: RepoRecord;
+  topTags: string[];
+}
+
+export interface RefreshDelta {
+  status: RefreshJob["status"] | "pending";
+  discovered: number;
+  enriched: number;
+  classified: number;
+  scored: number;
+  warnings: number;
+  completedAt?: string;
+}
+
 export interface DashboardSummary {
   updatedAt: string;
   totalRepos: number;
@@ -286,6 +320,10 @@ export interface DashboardSummary {
   anomalies: RepoRecord[];
   latestJob?: RefreshJob;
   rateLimits: RateLimitState[];
+  topInsights: DashboardInsight[];
+  topicHighlights: TopicHighlight[];
+  aiFocus: AiFocusArea[];
+  refreshDelta: RefreshDelta;
 }
 
 export interface RefreshResult {
@@ -356,6 +394,7 @@ export const AI_SUBCATEGORIES: AiSubcategory[] = [
   "Coding Agents",
   "Agent Frameworks",
   "Skills/Plugins",
+  "Prompts/Workflows",
   "MCP/Tools",
   "RAG/Knowledge",
   "LLM Apps",
@@ -404,7 +443,7 @@ export interface RepoSummary {
 }
 
 export interface RefreshProgress {
-  phase: "fetching" | "classifying" | "ranking" | "persisting";
+  phase: "fetching" | "classifying" | "ranking" | "persisting" | "done" | "error" | "cancelled";
   done: number;
   total: number;
   label: string;
@@ -439,7 +478,7 @@ export interface AppApiV2 extends AppApi {
   summarizeRepo(repoId: string, force?: boolean): Promise<{ cached: boolean; summary?: string }>;
   summarizeBatch(repoIds: string[], title: string): Promise<{ summary: string }>;
   cancelRefresh(): Promise<void>;
-  onRefreshProgress(callback: (data: RefreshProgress) => void): void;
-  onSummaryToken(callback: (data: { repoId: string; token: string }) => void): void;
+  onRefreshProgress(callback: (data: RefreshProgress) => void): () => void;
+  onSummaryToken(callback: (data: { repoId: string; token: string }) => void): () => void;
   getCategoryCounts(window: TrendWindow): Promise<CategoryCounts>;
 }

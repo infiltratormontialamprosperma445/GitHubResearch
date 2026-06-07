@@ -8,7 +8,7 @@ import { gunzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import { ProxyAgent } from "undici";
 
-const USER_AGENT = "Star-Intel-Desk/0.1";
+const USER_AGENT = "Star-Intel-Desk/1.0";
 
 async function smartRetry<T>(
   fn: () => Promise<T>,
@@ -123,7 +123,7 @@ export class GitHubSearchAdapter implements SourceAdapter {
 
   async discover(window: TrendWindow, settings: SourceSettings): Promise<DiscoveredRepository[]> {
     if (window === "historical") return [];
-    const queries = searchQueries(window);
+    const queries = searchQueries(window, Boolean(settings.githubToken));
     const tasks = queries.map((query) => async (): Promise<DiscoveredRepository[]> => {
       const url = new URL("https://api.github.com/search/repositories");
       url.searchParams.set("q", query);
@@ -371,47 +371,88 @@ function parseTrending(html: string, window: TrendWindow): DiscoveredRepository[
   }).filter((item) => item.repo.fullName !== "unknown/unknown");
 }
 
-function searchQueries(window: TrendWindow): string[] {
+function searchQueries(window: TrendWindow, authenticated: boolean): string[] {
   const since = new Date(Date.now() - windowDays(window) * 86_400_000).toISOString().slice(0, 10);
-  const all = [
-    // ── Core growth signal ──
-    `stars:>1000 pushed:>=${since}`,
-    // ── AI / Agent ecosystem (primary focus) ──
-    `topic:agent stars:>100 pushed:>=${since}`,
-    `topic:agents stars:>100 pushed:>=${since}`,
-    `topic:mcp stars:>30 pushed:>=${since}`,
-    `topic:model-context-protocol stars:>10 pushed:>=${since}`,
-    `topic:llm stars:>200 pushed:>=${since}`,
-    `topic:rag stars:>100 pushed:>=${since}`,
-    `topic:retrieval-augmented-generation stars:>50 pushed:>=${since}`,
-    `topic:model-serving stars:>50 pushed:>=${since}`,
-    `topic:ai-agent stars:>50 pushed:>=${since}`,
-    `topic:agentic stars:>30 pushed:>=${since}`,
-    `topic:multi-agent stars:>50 pushed:>=${since}`,
-    `topic:coding-agent stars:>20 pushed:>=${since}`,
-    `topic:ai-tools stars:>100 pushed:>=${since}`,
-    `topic:vector-database stars:>50 pushed:>=${since}`,
-    `topic:embedding stars:>50 pushed:>=${since}`,
-    `topic:multimodal stars:>100 pushed:>=${since}`,
-    `topic:diffusion stars:>100 pushed:>=${since}`,
-    `topic:fine-tuning stars:>50 pushed:>=${since}`,
-    `topic:llmops stars:>20 pushed:>=${since}`,
-    `topic:ai-inference stars:>50 pushed:>=${since}`,
-    `topic:prompt-engineering stars:>100 pushed:>=${since}`,
-    `topic:ai-evaluation stars:>20 pushed:>=${since}`,
-    `topic:ai-safety stars:>30 pushed:>=${since}`,
-    `topic:copilot stars:>100 pushed:>=${since}`,
-    // ── Developer tools ──
-    `topic:developer-tools stars:>500 pushed:>=${since}`,
-    // ── Data / Infrastructure ──
-    `topic:database stars:>1000 pushed:>=${since}`,
-    `topic:security stars:>1000 pushed:>=${since}`,
-    `topic:kubernetes stars:>1000 pushed:>=${since}`,
-    // ── Frontend ──
-    `topic:react stars:>1000 pushed:>=${since}`
+  const recent = `pushed:>=${since}`;
+  const core = [
+    `stars:>1000 ${recent}`,
+    `topic:agent stars:>100 ${recent}`,
+    `topic:agents stars:>100 ${recent}`,
+    `topic:llm stars:>200 ${recent}`,
+    `topic:mcp stars:>30 ${recent}`,
+    `topic:model-context-protocol stars:>10 ${recent}`,
+    `topic:coding-agent stars:>20 ${recent}`,
+    `topic:prompt-engineering stars:>50 ${recent}`,
+    `topic:ai-tools stars:>100 ${recent}`,
+    `topic:developer-tools stars:>500 ${recent}`
   ];
-  const limit = window === "daily" ? 15 : window === "weekly" ? 20 : all.length;
+  const aiEcosystem = [
+    `chatgpt stars:>50 ${recent}`,
+    `openai agents stars:>20 ${recent}`,
+    `"openai agents sdk" stars:>10 ${recent}`,
+    `"responses api" openai stars:>10 ${recent}`,
+    `"assistants api" openai stars:>10 ${recent}`,
+    `"custom gpt" stars:>10 ${recent}`,
+    `"claude code" stars:>10 ${recent}`,
+    `claude-code stars:>10 ${recent}`,
+    `anthropic agent stars:>10 ${recent}`,
+    `"claude" cli stars:>20 ${recent}`,
+    `"claude" mcp stars:>10 ${recent}`,
+    `"claude" skills stars:>10 ${recent}`,
+    `aider stars:>20 ${recent}`,
+    `"cursor agent" stars:>10 ${recent}`,
+    `"windsurf agent" stars:>10 ${recent}`,
+    `"codex cli" stars:>10 ${recent}`,
+    `devin stars:>10 ${recent}`,
+    `swe-agent stars:>10 ${recent}`,
+    `openhands stars:>10 ${recent}`,
+    `cline stars:>20 ${recent}`,
+    `"roo code" stars:>10 ${recent}`,
+    `"terminal agent" stars:>10 ${recent}`,
+    `"coding agent" cli stars:>10 ${recent}`,
+    `"model context protocol" stars:>10 ${recent}`,
+    `"mcp server" stars:>10 ${recent}`,
+    `"mcp client" stars:>10 ${recent}`,
+    `"tool calling" stars:>10 ${recent}`,
+    `"function calling" agent stars:>10 ${recent}`,
+    `"slash commands" ai stars:>10 ${recent}`,
+    `"prompt library" stars:>10 ${recent}`,
+    `"prompt manager" stars:>10 ${recent}`,
+    `"prompt workflow" stars:>10 ${recent}`,
+    `"system prompt" stars:>10 ${recent}`,
+    `"prompt templates" stars:>10 ${recent}`
+  ];
+  const broader = [
+    `topic:rag stars:>100 ${recent}`,
+    `topic:retrieval-augmented-generation stars:>50 ${recent}`,
+    `topic:model-serving stars:>50 ${recent}`,
+    `topic:ai-agent stars:>50 ${recent}`,
+    `topic:agentic stars:>30 ${recent}`,
+    `topic:multi-agent stars:>50 ${recent}`,
+    `topic:vector-database stars:>50 ${recent}`,
+    `topic:embedding stars:>50 ${recent}`,
+    `topic:multimodal stars:>100 ${recent}`,
+    `topic:diffusion stars:>100 ${recent}`,
+    `topic:fine-tuning stars:>50 ${recent}`,
+    `topic:llmops stars:>20 ${recent}`,
+    `topic:ai-inference stars:>50 ${recent}`,
+    `topic:ai-evaluation stars:>20 ${recent}`,
+    `topic:ai-safety stars:>30 ${recent}`,
+    `topic:copilot stars:>100 ${recent}`,
+    `topic:database stars:>1000 ${recent}`,
+    `topic:security stars:>1000 ${recent}`,
+    `topic:kubernetes stars:>1000 ${recent}`,
+    `topic:react stars:>1000 ${recent}`
+  ];
+  const all = uniqueQueries([...core, ...aiEcosystem, ...broader]);
+  const limit = authenticated
+    ? (window === "daily" ? 24 : window === "weekly" ? 36 : all.length)
+    : (window === "daily" ? 10 : window === "weekly" ? 14 : 18);
   return all.slice(0, limit);
+}
+
+function uniqueQueries(queries: string[]): string[] {
+  return Array.from(new Set(queries));
 }
 
 function windowDays(window: TrendWindow): number {
@@ -638,11 +679,31 @@ function lightweightRepo(fullName: string, stars: number): Repository {
 function supplementalCatalog(window: TrendWindow): Repository[] {
   const now = new Date().toISOString();
   const repos: Array<[string, string, number, string, string[]]> = [
-    ["openai/openai-agents-python", "Python framework for building multi-agent AI applications.", 24000, "Python", ["agents", "agent-framework", "llm"]],
+    ["openai/openai-agents-python", "Python framework for building multi-agent AI applications.", 24000, "Python", ["openai", "agents", "agent-framework", "llm"]],
+    ["openai/codex", "OpenAI coding agent CLI and terminal workflow for software engineering tasks.", 30000, "TypeScript", ["openai", "codex", "coding-agent", "cli"]],
+    ["openai/openai-cookbook", "Examples, guides, prompts, and workflows for building with OpenAI APIs.", 65000, "Jupyter Notebook", ["openai", "prompt", "llm", "examples"]],
     ["modelcontextprotocol/servers", "Reference MCP servers for connecting AI assistants to tools and data.", 62000, "TypeScript", ["mcp", "tools", "agents"]],
+    ["modelcontextprotocol/typescript-sdk", "TypeScript SDK for Model Context Protocol clients and servers.", 15000, "TypeScript", ["mcp", "sdk", "tools"]],
+    ["modelcontextprotocol/python-sdk", "Python SDK for building Model Context Protocol clients and servers.", 9000, "Python", ["mcp", "python", "tools"]],
+    ["aider-ai/aider", "AI pair programming in the terminal with support for multiple LLM providers.", 35000, "Python", ["coding-agent", "cli", "llm", "aider"]],
+    ["All-Hands-AI/OpenHands", "Open platform for software engineering agents that can modify code and run commands.", 55000, "Python", ["coding-agent", "software-engineering-agent", "llm"]],
     ["cline/cline", "Autonomous coding agent inside the IDE.", 52000, "TypeScript", ["coding-agent", "llm", "developer-tools"]],
+    ["RooVetGit/Roo-Code", "Agentic coding assistant extension with tool use and coding workflows.", 18000, "TypeScript", ["coding-agent", "tools", "llm"]],
+    ["continuedev/continue", "Open-source AI code assistant and custom coding agent platform.", 28000, "TypeScript", ["coding-agent", "developer-tools", "llm"]],
+    ["sst/opencode", "Terminal-native AI coding agent and CLI workflow.", 18000, "TypeScript", ["coding-agent", "cli", "terminal-agent"]],
+    ["plandex-ai/plandex", "Terminal-based AI coding engine for large changes and planning workflows.", 14000, "Go", ["coding-agent", "cli", "planning-agent"]],
     ["browser-use/browser-use", "Make websites accessible for AI agents.", 71000, "Python", ["agents", "browser", "automation"]],
+    ["langchain-ai/langgraph", "Build stateful multi-agent and tool-calling applications with language models.", 18000, "Python", ["agent-framework", "multi-agent", "llm"]],
+    ["crewAIInc/crewAI", "Framework for orchestrating role-playing autonomous AI agents.", 32000, "Python", ["agent-framework", "multi-agent", "llm"]],
+    ["microsoft/autogen", "Programming framework for agentic AI and multi-agent applications.", 45000, "Python", ["agent-framework", "multi-agent", "llm"]],
+    ["microsoft/semantic-kernel", "SDK for agents, plugins, planners, and model orchestration.", 24000, "C#", ["agent-framework", "plugins", "llm"]],
+    ["stanfordnlp/dspy", "Framework for programming and optimizing language model pipelines.", 25000, "Python", ["prompt", "optimization", "llm"]],
+    ["promptfoo/promptfoo", "Test, evaluate, and secure LLM prompts and applications.", 8000, "TypeScript", ["prompt-evaluation", "eval", "llm"]],
+    ["f/awesome-chatgpt-prompts", "Curated prompt library for ChatGPT and LLM workflows.", 120000, "HTML", ["chatgpt", "prompt-library", "prompts"]],
+    ["microsoft/promptflow", "Build, evaluate, and deploy prompt workflows and LLM apps.", 10000, "Python", ["prompt-workflow", "llmops", "evaluation"]],
+    ["BerriAI/litellm", "LLM gateway and model router for OpenAI-compatible APIs.", 28000, "Python", ["llm", "gateway", "openai-compatible"]],
     ["vllm-project/vllm", "High-throughput and memory-efficient inference and serving engine for LLMs.", 36000, "Python", ["llm", "model-serving", "inference"]],
+    ["ollama/ollama", "Run large language models locally from a simple CLI.", 145000, "Go", ["llm", "cli", "local-ai", "model-serving"]],
     ["run-llama/llama_index", "Data framework for LLM applications and retrieval augmented generation.", 39000, "Python", ["rag", "llm", "retrieval"]],
     ["shadcn-ui/ui", "Reusable UI components for modern React applications.", 92000, "TypeScript", ["react", "ui", "components"]],
     ["fastapi/fastapi", "FastAPI framework for production APIs.", 84000, "Python", ["api", "backend", "framework"]],
@@ -683,8 +744,15 @@ function estimateGrowth(window: TrendWindow, stars: number, rank: number): numbe
 
 function inferTopics(value: string): string[] {
   const text = value.toLowerCase();
-  const topics = ["agent", "mcp", "llm", "rag", "react", "cli", "security", "kubernetes", "database"]
-    .filter((topic) => text.includes(topic));
+  const candidates = [
+    "claude-code", "claude", "anthropic", "chatgpt", "openai", "codex",
+    "aider", "cursor", "windsurf", "cline", "roo-code", "openhands",
+    "coding-agent", "terminal-agent", "agent", "agents", "mcp", "model-context-protocol",
+    "skills", "plugins", "prompt-library", "prompt-workflow", "prompt", "llm",
+    "rag", "model-serving", "inference", "ollama", "vllm", "react", "cli",
+    "security", "kubernetes", "database"
+  ];
+  const topics = candidates.filter((topic) => text.includes(topic.replace(/-/g, " ")) || text.includes(topic));
   return topics.length ? topics : ["trending"];
 }
 

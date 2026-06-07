@@ -90,6 +90,7 @@ export class AppDatabase {
     database.migrate();
     database.seedIfEmpty();
     database.ensureBaselineCatalog();
+    database.ingestFts();
     return database;
   }
 
@@ -287,16 +288,13 @@ export class AppDatabase {
   // ========================================================================
 
   searchRepos(query: string, filters: SearchFilters = {}, sort: SortOption = "relevance"): SearchResult[] {
-    if (!query || query.trim().length === 0) return [];
-    const where: string[] = [];
-    const params: (string | number)[] = [];
-    where.push("rs.repo_id MATCH ?");
-    params.push(query);
-    if (filters.windowType) {
-      const w = filters.windowType === "historical" ? "monthly" : filters.windowType;
-      where.push("rk.trend_window = ?");
-      params.push(w);
-    }
+    const ftsQuery = buildFtsQuery(query);
+    if (!ftsQuery) return [];
+    const where: string[] = ["repo_search MATCH ?", "rk.trend_window = ?"];
+    const params: (string | number)[] = [
+      ftsQuery,
+      filters.windowType === "historical" ? "monthly" : filters.windowType ?? "monthly"
+    ];
     if (filters.primaryCategory && filters.primaryCategory !== "All") {
       where.push("c.primary_category = ?");
       params.push(filters.primaryCategory);
@@ -318,23 +316,23 @@ export class AppDatabase {
       case "stars": orderBy = "r.stars DESC"; break;
       case "growth": orderBy = "rk.growth_score DESC"; break;
       case "recent": orderBy = "r.pushed_at DESC"; break;
-      default: orderBy = "bm25(rs) ASC"; break;
+      default: orderBy = "bm25(repo_search) ASC"; break;
     }
     const sql = `
-      SELECT rs.repo_id, r.full_name, r.description, r.language, r.stars,
+      SELECT repo_search.repo_id, r.full_name, r.description, r.language, r.stars,
         COALESCE(snap.growth, 0) AS stars_today, c.primary_category, c.tags,
         CASE WHEN col.repo_id IS NOT NULL THEN 1 ELSE 0 END AS is_collected,
-        ABS(bm25(rs)) AS relevance_score,
-        snippet(rs, 1, '<mark>', '</mark>', '...', 20) AS hl_full_name,
-        snippet(rs, 2, '<mark>', '</mark>', '...', 40) AS hl_description,
-        snippet(rs, 6, '<mark>', '</mark>', '...', 20) AS hl_tags
-      FROM repo_search rs
-      JOIN repositories r ON r.id = rs.repo_id
-      LEFT JOIN classifications c ON c.repo_id = rs.repo_id
-      LEFT JOIN ranking_scores rk ON rk.repo_id = rs.repo_id
-      LEFT JOIN collections col ON col.repo_id = rs.repo_id
+        ABS(bm25(repo_search)) AS relevance_score,
+        snippet(repo_search, 1, '<mark>', '</mark>', '...', 20) AS hl_full_name,
+        snippet(repo_search, 2, '<mark>', '</mark>', '...', 40) AS hl_description,
+        snippet(repo_search, 6, '<mark>', '</mark>', '...', 20) AS hl_tags
+      FROM repo_search
+      JOIN repositories r ON r.id = repo_search.repo_id
+      JOIN ranking_scores rk ON rk.repo_id = repo_search.repo_id
+      LEFT JOIN classifications c ON c.repo_id = repo_search.repo_id
+      LEFT JOIN collections col ON col.repo_id = repo_search.repo_id
       LEFT JOIN (SELECT repo_id, MAX(growth) AS growth FROM repo_snapshots GROUP BY repo_id) snap
-        ON snap.repo_id = rs.repo_id
+        ON snap.repo_id = repo_search.repo_id
       WHERE ${where.join(" AND ")}
       ORDER BY ${orderBy}
       LIMIT 200`;
@@ -438,6 +436,16 @@ export class AppDatabase {
       for (const id of repoIds) { delStmt.run(id); insStmt.run(id); }
     });
     sync();
+  }
+
+  syncSearchIndexForRepo(repoId: string): void {
+    this.syncFtsForRepo(repoId);
+    this.queryCache.invalidate();
+  }
+
+  syncSearchIndexForRepos(repoIds: string[]): void {
+    this.syncFtsForRepoBatch(repoIds);
+    this.queryCache.invalidate();
   }
 
   ingestRepos(repos: Array<Repository & { growth: number; source: string; rank: number; window: TrendWindow }>): void {
@@ -1182,6 +1190,33 @@ function manualRuleFromRow(row: Row): ManualClassificationRule {
 function safeJson<T>(value: unknown, fallback: T): T {
   if (typeof value !== "string") return fallback;
   try { return JSON.parse(value) as T; } catch { return fallback; }
+}
+
+function buildFtsQuery(query: string): string {
+  const normalized = query
+    .normalize("NFKC")
+    .replace(/[“”]/g, "\"")
+    .replace(/[‘’]/g, "'")
+    .trim();
+  if (!normalized) return "";
+
+  const rawTerms = normalized.match(/[\p{L}\p{N}_-]+/gu) ?? [];
+  const terms = new Set<string>();
+  for (const raw of rawTerms) {
+    const clean = raw.replace(/^[-_]+|[-_]+$/g, "");
+    if (!clean) continue;
+    const parts = clean.split(/[-_]+/).filter(Boolean);
+    if (parts.length > 1) {
+      for (const part of parts) terms.add(part);
+    } else {
+      terms.add(clean);
+    }
+  }
+
+  return Array.from(terms)
+    .slice(0, 8)
+    .map((term) => `"${term}"`)
+    .join(" AND ");
 }
 
 function safeJsonArray<T>(value: unknown): T[] {
