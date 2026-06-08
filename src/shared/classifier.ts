@@ -12,6 +12,8 @@ type RuleMatch = {
   confidence: number;
 };
 
+export const CLASSIFIER_RULE_VERSION = "2026-06-08-ai-zh-v1";
+
 const AI_RULES: RuleMatch[] = [
   {
     primary: "AI",
@@ -20,7 +22,8 @@ const AI_RULES: RuleMatch[] = [
       "claude code", "claude-code", "chatgpt cli", "codex", "codex cli", "coding agent", "code agent", "ai coding", "devin",
       "swe-agent", "swe-bench", "code generation", "code assistant", "ai developer",
       "software engineering agent", "terminal agent", "ide agent", "cursor", "windsurf", "aider", "continue dev",
-      "openhands", "open hands", "cline", "roo code", "roo-code", "opencode", "plandex", "codeium"
+      "openhands", "open hands", "cline", "roo code", "roo-code", "opencode", "plandex", "codeium",
+      "编程智能体", "代码智能体", "编码智能体", "代码助手", "ai 编程", "ai 编码", "终端智能体", "ide 智能体"
     ],
     confidence: 0.93
   },
@@ -30,7 +33,8 @@ const AI_RULES: RuleMatch[] = [
     keywords: [
       "skill", "skills", "plugin", "plugins", "tool plugin", "extension",
       "ai plugin", "agent skill", "agent skills", "mcp plugin", "tool extension",
-      "slash command", "slash-command", "custom command", "command palette"
+      "slash command", "slash-command", "custom command", "command palette",
+      "技能", "插件", "扩展", "工具插件", "智能体技能", "agent 技能", "mcp 插件", "斜杠命令", "自定义命令"
     ],
     confidence: 0.88
   },
@@ -40,7 +44,9 @@ const AI_RULES: RuleMatch[] = [
     keywords: [
       "prompt library", "prompt manager", "prompt workflow", "prompt engineering",
       "prompt template", "prompt templates", "system prompt", "chatgpt prompts",
-      "ai prompts", "llm prompts", "promptflow", "prompt flow"
+      "ai prompts", "llm prompts", "promptflow", "prompt flow",
+      "提示词", "提示语", "提示词库", "提示词管理", "提示词工作流", "提示词工程",
+      "提示词模板", "系统提示词", "工作流提示词", "chatgpt 提示词", "大模型提示词"
     ],
     confidence: 0.87
   },
@@ -50,7 +56,8 @@ const AI_RULES: RuleMatch[] = [
     keywords: [
       "mcp", "model context protocol", "tool calling", "tools server", "agent tool",
       "mcp server", "mcp-server", "mcp client", "mcp-client", "function calling", "tool use", "tool-use",
-      "computer use", "tool server", "tool adapter"
+      "computer use", "tool server", "tool adapter",
+      "模型上下文协议", "工具调用", "函数调用", "工具服务器", "mcp 服务", "mcp 客户端", "工具适配器"
     ],
     confidence: 0.91
   },
@@ -60,7 +67,8 @@ const AI_RULES: RuleMatch[] = [
     keywords: [
       "agent framework", "multi-agent", "workflow agent", "autonomous agent", "agentic",
       "agent orchestration", "agent chain", "langgraph", "autogen", "crewai",
-      "openai agents sdk", "openai agents", "semantic kernel", "agent swarm", "agent collaboration", "agent pipeline"
+      "openai agents sdk", "openai agents", "semantic kernel", "agent swarm", "agent collaboration", "agent pipeline",
+      "智能体框架", "多智能体", "工作流智能体", "自主智能体", "智能体编排", "智能体协作", "智能体流水线"
     ],
     confidence: 0.9
   },
@@ -69,7 +77,8 @@ const AI_RULES: RuleMatch[] = [
     secondary: "Agents",
     keywords: [
       "agent", "agents", "assistant", "autonomous", "crew", "swarm",
-      "ai assistant", "conversational agent", "task agent", "planning agent"
+      "ai assistant", "conversational agent", "task agent", "planning agent",
+      "智能体", "代理", "ai 助手", "对话智能体", "任务智能体", "规划智能体"
     ],
     confidence: 0.84
   },
@@ -79,7 +88,8 @@ const AI_RULES: RuleMatch[] = [
     keywords: [
       "rag", "retrieval", "vector database", "embedding", "knowledge base", "semantic search",
       "retrieval augmented", "vector store", "chunking", "document retrieval",
-      "knowledge graph", "semantic index", "hybrid search", "reranking", "reranker"
+      "knowledge graph", "semantic index", "hybrid search", "reranking", "reranker",
+      "检索增强", "向量数据库", "向量存储", "嵌入", "知识库", "语义搜索", "知识图谱", "混合搜索", "重排序"
     ],
     confidence: 0.88
   },
@@ -89,7 +99,8 @@ const AI_RULES: RuleMatch[] = [
     keywords: [
       "llm serving", "inference", "vllm", "ollama", "llama.cpp", "model server",
       "model serving", "text generation inference", "tgi", "tensorrt", "triton server",
-      "model deployment", "serving engine", "batch inference", "speculative decoding"
+      "model deployment", "serving engine", "batch inference", "speculative decoding",
+      "模型服务", "模型推理", "推理服务", "模型部署", "大模型部署", "批量推理"
     ],
     confidence: 0.87
   },
@@ -99,7 +110,8 @@ const AI_RULES: RuleMatch[] = [
     keywords: [
       "eval", "benchmark", "prompt evaluation", "llm judge", "testing llm",
       "llm benchmark", "evaluation framework", "human eval", "mt bench",
-      "arena", "leaderboard", "ai testing", "prompt test"
+      "arena", "leaderboard", "ai testing", "prompt test",
+      "模型评测", "大模型评测", "提示词评测", "评估框架", "排行榜", "基准测试"
     ],
     confidence: 0.84
   },
@@ -109,7 +121,8 @@ const AI_RULES: RuleMatch[] = [
     keywords: [
       "prompt injection", "jailbreak", "guardrail", "red team", "ai security",
       "ai safety", "alignment", "rlhf", "dpo", "constitutional ai",
-      "adversarial attack", "model watermark", "content filter"
+      "adversarial attack", "model watermark", "content filter",
+      "提示词注入", "越狱", "护栏", "ai 安全", "大模型安全", "模型水印", "内容过滤"
     ],
     confidence: 0.86
   },
@@ -130,7 +143,8 @@ const AI_RULES: RuleMatch[] = [
       "llm", "chatbot", "openai", "anthropic", "gemini", "copilot",
       "gpt", "claude", "chatgpt", "custom gpt", "gpts", "assistants api", "assistant api",
       "responses api", "openai compatible", "langchain", "llama", "mistral", "deepseek",
-      "qwen", "phi model", "small language model", "on-device llm"
+      "qwen", "phi model", "small language model", "on-device llm",
+      "大模型", "语言模型", "聊天机器人", "对话机器人", "通义千问", "千问", "本地大模型", "端侧大模型"
     ],
     confidence: 0.8
   }

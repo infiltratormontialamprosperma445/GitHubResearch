@@ -16,6 +16,8 @@ export type MainToWorkerMessage =
  * Messages sent FROM the worker TO the main process.
  */
 export type WorkerToMainMessage =
+  | { type: "WORKER_READY" }
+  | { type: "WORKER_MAINTENANCE_DONE"; stats: { baselineSeeded: boolean; reclassified: number; ftsRebuilt: boolean } }
   | { type: "REFRESH_PROGRESS"; phase: string; done: number; total: number; label: string; repoCount: number }
   | { type: "REFRESH_DONE"; stats: { total: number; newCount: number; durationMs: number; result: any } }
   | { type: "REFRESH_ERROR"; error: string }

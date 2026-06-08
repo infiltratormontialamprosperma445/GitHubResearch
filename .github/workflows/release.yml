@@ -9,7 +9,7 @@ on:
       tag:
         description: 'Release tag to create/update without changing package version'
         required: true
-        default: 'v1.0.0'
+        default: 'v1.0.1'
 
 permissions:
   contents: write
@@ -42,6 +42,7 @@ jobs:
           name: windows-builds
           path: |
             release/*.exe
+          retention-days: 30
 
   build-macos:
     runs-on: macos-latest
@@ -73,8 +74,39 @@ jobs:
             release/*.zip
           retention-days: 30
 
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build Linux
+        run: npm run dist:linux
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-builds
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+          retention-days: 30
+
   publish:
-    needs: [build-windows, build-macos]
+    needs: [build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -92,6 +124,12 @@ jobs:
           name: macos-builds
           path: release/
 
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-builds
+          path: release/
+
       - name: List release files
         run: ls -la release/
 
@@ -104,10 +142,22 @@ jobs:
           else
             TAG="${{ github.ref_name }}"
           fi
-          # Check if release exists, create if not
-          if ! gh release view "$TAG" &>/dev/null; then
-            gh release create "$TAG" --title "Star Intel Desk $TAG" --generate-notes
+          NOTES_FILE="$(mktemp)"
+          cat > "$NOTES_FILE" <<EOF
+GitHubResearch $TAG
+
+Windows, macOS, and Linux desktop builds are attached below. GitHub automatically provides Source code archives for this tag.
+
+中文说明：下方附件为 GitHubResearch 桌面版 Windows、macOS、Linux 构建产物；Source code 压缩包由 GitHub 自动生成。本说明使用 UTF-8 写入，避免 Release 中文乱码。
+EOF
+
+          # Create or update release metadata so existing releases do not keep stale/garbled titles or notes.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "GitHubResearch $TAG" --notes-file "$NOTES_FILE"
+          else
+            gh release create "$TAG" --title "GitHubResearch $TAG" --notes-file "$NOTES_FILE"
           fi
+
           # Upload all build artifacts
           for file in release/*; do
             if [ -f "$file" ]; then

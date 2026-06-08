@@ -34,7 +34,7 @@ npm run preview -- --host 127.0.0.1 --port 4173
 
 ```powershell
 npm run pack:win
-.\release\win-unpacked\Star Intel Desk.exe
+.\release\win-unpacked\GitHubResearch.exe
 ```
 
 当前 `package.json` 中 Windows 构建配置了 `"signAndEditExecutable": false`，用于降低本机未签名 smoke test 的阻塞。正式发布需要补充图标、证书、安装包检查和升级策略。
@@ -45,7 +45,7 @@ npm run pack:win
 npm run dist:win
 ```
 
-该命令会生成 `build/icon.ico` / `build/icon.png`，执行生产构建，并输出 NSIS 安装器到当前版本号对应的 `release\Star Intel Desk-版本-win-x64.exe`。安装器配置会创建桌面快捷方式和开始菜单快捷方式。应用已设置 Windows `AppUserModelID`，运行时会按 Star Intel Desk 在任务栏中显示。
+该命令会生成 `build/icon.ico` / `build/icon.png`，执行生产构建，并输出 NSIS 安装器到当前版本号对应的 `release\GitHubResearch-版本-win-x64.exe`。安装器配置会创建桌面快捷方式和开始菜单快捷方式。应用已设置 Windows `AppUserModelID`，运行时会按 GitHubResearch 在任务栏中显示。
 
 ### 目录结构
 
@@ -109,7 +109,7 @@ Browser preview is useful for UI checks, but it uses bundled sample data. Live c
 
 ```powershell
 npm run pack:win
-.\release\win-unpacked\Star Intel Desk.exe
+.\release\win-unpacked\GitHubResearch.exe
 ```
 
 The current Windows build config sets `"signAndEditExecutable": false` in `package.json` to reduce friction for local unsigned smoke tests. A formal release should add icon assets, signing, installer validation, and update strategy.
@@ -120,7 +120,7 @@ The current Windows build config sets `"signAndEditExecutable": false` in `packa
 npm run dist:win
 ```
 
-This command generates `build/icon.ico` / `build/icon.png`, runs the production build, and outputs the NSIS installer as `release\Star Intel Desk-version-win-x64.exe` for the current package version. The installer creates desktop and Start Menu shortcuts. The app also sets a Windows `AppUserModelID`, so it appears as Star Intel Desk in the taskbar while running.
+This command generates `build/icon.ico` / `build/icon.png`, runs the production build, and outputs the NSIS installer as `release\GitHubResearch-version-win-x64.exe` for the current package version. The installer creates desktop and Start Menu shortcuts. The app also sets a Windows `AppUserModelID`, so it appears as GitHubResearch in the taskbar while running.
 
 ### Project Layout
 

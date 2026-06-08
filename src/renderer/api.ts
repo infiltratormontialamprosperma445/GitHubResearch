@@ -1,3 +1,4 @@
+import { APP_NAME } from "../shared/branding";
 import { classifyRepository } from "../shared/classifier";
 import { scoreRepository } from "../shared/ranking";
 import {
@@ -241,7 +242,7 @@ export const api: AppApi = window.githubIntel ?? {
     return record;
   },
   async exportLearningMarkdown() {
-    return "# Star Intel Desk Learning Notes\n";
+    return `# ${APP_NAME} Learning Notes\n`;
   },
   async backupData() {
     return "Preview browser memory";

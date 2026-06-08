@@ -18,9 +18,9 @@ import type { MainToWorkerMessage, WorkerToMainMessage } from "../src/shared/wor
 import { AppDatabase } from "./services/database.js";
 import { IntelligenceService } from "./services/intelligence.js";
 import { summarizeRepo, summarizeBatch } from "./services/summaryService.js";
+import { APP_ID, APP_NAME } from "../src/shared/branding.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const APP_ID = "com.star-intel-desk.app";
 
 let mainWindow: BrowserWindow | undefined;
 let worker: UtilityProcess | undefined;
@@ -29,8 +29,12 @@ let isRefreshing = false;
 let workerRestartAttempts = 0;
 let fallbackServicePromise: Promise<{ db: AppDatabase; service: IntelligenceService }> | undefined;
 let localRefreshAbort: AbortController | undefined;
+let workerReady = false;
+let workerReadyPromise: Promise<void> | undefined;
+let resolveWorkerReady: (() => void) | undefined;
+let rejectWorkerReady: ((error: Error) => void) | undefined;
 
-const ENABLE_UTILITY_WORKER = process.env.STAR_INTEL_DISABLE_WORKER !== "1";
+const ENABLE_UTILITY_WORKER = process.env.GITHUB_RESEARCH_DISABLE_WORKER !== "1";
 const MAX_WORKER_RESTARTS = 2;
 const NON_IDEMPOTENT_WORKER_METHODS = new Set([
   "toggleCollection",
@@ -67,19 +71,34 @@ if (process.platform === "win32") {
 }
 
 function configureProcessEnvironment(): void {
-  process.env.STAR_INTEL_USER_DATA = app.getPath("userData");
+  process.env.GITHUB_RESEARCH_USER_DATA = process.env.GITHUB_RESEARCH_USER_DATA ?? app.getPath("userData");
 }
 
 async function bootstrap(): Promise<void> {
   configureProcessEnvironment();
-  if (ENABLE_UTILITY_WORKER) {
-    startWorker();
-  } else {
-    console.log("[main] Utility worker disabled by STAR_INTEL_DISABLE_WORKER=1; using main-process data service.");
-  }
   registerIpc();
   createWindow();
   startScheduler();
+
+  if (ENABLE_UTILITY_WORKER) {
+    if (!workerReadyPromise) {
+      workerReady = false;
+      workerReadyPromise = new Promise<void>((resolve, reject) => {
+        resolveWorkerReady = resolve;
+        rejectWorkerReady = reject;
+      });
+    }
+    const start = () => {
+      if (!worker) startWorker();
+    };
+    if (mainWindow?.webContents.isLoading()) {
+      mainWindow.webContents.once("did-finish-load", () => setTimeout(start, 150));
+    } else {
+      setTimeout(start, 150);
+    }
+  } else {
+    console.log("[main] Utility worker disabled; using main-process data service.");
+  }
 }
 
 // ── Window creation ────────────────────────────────────────────
@@ -96,7 +115,7 @@ function createWindow(): void {
     height: 940,
     minWidth: 1120,
     minHeight: 720,
-    title: "Star Intel Desk",
+    title: APP_NAME,
     backgroundColor: "#0d0d0d",
     ...(process.platform === "darwin" ? { titleBarStyle: "hiddenInset" as const } : {}),
     ...(frameless ? { frame: false } : {}),
@@ -158,8 +177,16 @@ function startWorker(): void {
   const workerPath = join(__dirname, "worker/refreshWorker.js");
   console.log("[main] Starting worker at:", workerPath);
 
+  workerReady = false;
+  if (!workerReadyPromise) {
+    workerReadyPromise = new Promise<void>((resolve, reject) => {
+      resolveWorkerReady = resolve;
+      rejectWorkerReady = reject;
+    });
+  }
+
   worker = utilityProcess.fork(workerPath, [], {
-    serviceName: "star-intel-worker",
+    serviceName: "githubresearch-worker",
     execArgv: [],
     env: process.env
   });
@@ -171,6 +198,11 @@ function startWorker(): void {
   worker.on("exit", (exitCode: number) => {
     console.warn(`[main] Worker exited with code ${exitCode}`);
     worker = undefined;
+    workerReady = false;
+    rejectWorkerReady?.(new Error("Worker process exited before it became ready."));
+    workerReadyPromise = undefined;
+    resolveWorkerReady = undefined;
+    rejectWorkerReady = undefined;
 
     // Reject all pending queries
     for (const [id, pending] of pendingQueries) {
@@ -194,6 +226,42 @@ function startWorker(): void {
       console.warn("[main] Worker failed repeatedly; using main-process data fallback.");
     }
   });
+}
+
+function markWorkerReady(): void {
+  workerReady = true;
+  resolveWorkerReady?.();
+  workerReadyPromise = undefined;
+  resolveWorkerReady = undefined;
+  rejectWorkerReady = undefined;
+}
+
+function rejectPendingWorkerReady(error: Error): void {
+  if (!workerReady) rejectWorkerReady?.(error);
+  workerReady = false;
+  workerReadyPromise = undefined;
+  resolveWorkerReady = undefined;
+  rejectWorkerReady = undefined;
+}
+
+async function waitForWorkerReady(timeoutMs = 2500): Promise<boolean> {
+  if (workerReady) return true;
+  if (!workerReadyPromise) return false;
+
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      workerReadyPromise,
+      new Promise<void>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error("Worker startup timed out.")), timeoutMs);
+      })
+    ]);
+    return Boolean(worker) && workerReady;
+  } catch {
+    return false;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 function clearProgressTimer(): void {
@@ -245,6 +313,14 @@ function sendRefreshProgressThrottled(progress: RefreshProgress): void {
 
 function handleWorkerMessage(msg: WorkerToMainMessage): void {
   switch (msg.type) {
+    case "WORKER_READY":
+      markWorkerReady();
+      break;
+
+    case "WORKER_MAINTENANCE_DONE":
+      console.log("[main] Worker startup maintenance completed:", msg.stats);
+      break;
+
     case "REFRESH_PROGRESS":
       sendRefreshProgressThrottled({
         phase: msg.phase as RefreshProgress["phase"],
@@ -300,7 +376,9 @@ function handleWorkerMessage(msg: WorkerToMainMessage): void {
     case "QUERY_ERROR": {
       // Special case: worker init failure
       if (msg.id === "__init__") {
-        console.error("[main] Worker initialization failed:", msg.error);
+        const initError = new Error(msg.error);
+        console.error("[main] Worker initialization failed:", initError.message);
+        rejectPendingWorkerReady(initError);
         break;
       }
       const pending = pendingQueries.get(msg.id);
@@ -362,10 +440,19 @@ function postToWorker(msg: MainToWorkerMessage): void {
 
 async function getFallbackService(): Promise<{ db: AppDatabase; service: IntelligenceService }> {
   if (!fallbackServicePromise) {
-    fallbackServicePromise = AppDatabase.open().then((db) => ({
-      db,
-      service: new IntelligenceService(db)
-    }));
+    fallbackServicePromise = AppDatabase.open().then((db) => {
+      setTimeout(() => {
+        try {
+          console.log("[main] Fallback startup maintenance completed:", db.runStartupMaintenance());
+        } catch (error) {
+          console.warn("[main] Fallback startup maintenance failed:", error instanceof Error ? error.message : String(error));
+        }
+      }, 25);
+      return {
+        db,
+        service: new IntelligenceService(db)
+      };
+    });
   }
   return fallbackServicePromise;
 }
@@ -416,9 +503,14 @@ async function queryLocal(method: string, ...args: any[]): Promise<any> {
 }
 
 async function queryData(method: string, ...args: any[]): Promise<any> {
-  if (!worker) {
+  const ready = await waitForWorkerReady();
+  if (!ready || !worker) {
+    const message = "Worker is still starting; delaying main-process fallback until timeout elapsed.";
+    if (NON_IDEMPOTENT_WORKER_METHODS.has(method)) throw new Error(message);
+    console.warn(`[main] ${message}`);
     return queryLocal(method, ...args);
   }
+
   try {
     return await queryWorker(method, ...args);
   } catch (error) {
@@ -518,7 +610,8 @@ function registerIpc(): void {
 
     const windows = window ? [window] : ["daily", "weekly", "monthly"];
 
-    const activeWorker = worker;
+    const ready = await waitForWorkerReady(5000);
+    const activeWorker = ready ? worker : undefined;
     if (!activeWorker) {
       try {
         return await refreshLocal(windows);
@@ -722,15 +815,15 @@ function startScheduler(): void {
       const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
       if (currentTime === settings.refreshTime && autoRefreshDate !== today && !isRefreshing) {
         autoRefreshDate = today;
-        if (!worker) {
-          isRefreshing = true;
-          void refreshLocal(["daily", "weekly", "monthly"]).finally(() => {
-            isRefreshing = false;
-          });
-        } else {
+        if (worker && await waitForWorkerReady(5000)) {
           postToWorker({
             type: "REFRESH_START",
             payload: { windows: ["daily", "weekly", "monthly"] }
+          });
+        } else {
+          isRefreshing = true;
+          void refreshLocal(["daily", "weekly", "monthly"]).finally(() => {
+            isRefreshing = false;
           });
         }
       }

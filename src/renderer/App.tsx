@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { api } from "./api";
 import { apiV2 } from "./api";
+import { APP_NAME, APP_VERSION } from "../shared/branding";
 import { useI18n } from "./i18n";
 import CommandPalette from "./components/CommandPalette";
 import SkeletonRow from "./components/SkeletonRow";
@@ -77,12 +78,11 @@ const MODULES: Array<{ id: ModuleId; labelKey: string; icon: typeof LayoutDashbo
 ];
 
 const PAGE_SIZE = 50;
-const APP_VERSION = "1.0.0";
 
 // ── Theme management ──────────────────────────────────────────
 
 type Theme = "dark" | "light";
-const THEME_KEY = "star-intel-theme";
+const THEME_KEY = "githubresearch-theme";
 
 function getInitialTheme(): Theme {
   try {
@@ -105,7 +105,6 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string>("");
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [toast, setToast] = useState("");
-  const [autoRefreshWindows, setAutoRefreshWindows] = useState<TrendWindow[]>([]);
   const [refreshProgress, setRefreshProgress] = useState<RefreshProgress | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [page, setPage] = useState(1);
@@ -151,12 +150,14 @@ export default function App() {
   const categoryCountsQuery = useQuery({
     queryKey: ["category-counts", window],
     queryFn: () => apiV2.getCategoryCounts(window),
-    placeholderData: keepPreviousData
+    placeholderData: keepPreviousData,
+    enabled: reposQuery.isFetched || dashboardQuery.isFetched
   });
 
   const sourcesQuery = useQuery({
     queryKey: ["sources"],
-    queryFn: () => api.getSources()
+    queryFn: () => api.getSources(),
+    enabled: dashboardQuery.isFetched || activeModule === "sources" || activeModule === "settings"
   });
 
   const settingsQuery = useQuery({
@@ -166,7 +167,8 @@ export default function App() {
 
   const rateLimitsQuery = useQuery({
     queryKey: ["rate-limits"],
-    queryFn: () => api.getRateLimits()
+    queryFn: () => api.getRateLimits(),
+    enabled: sourcesQuery.isFetched || activeModule === "sources" || activeModule === "settings"
   });
 
   // ── Refresh with real IPC progress ─────────────────────────
@@ -267,14 +269,7 @@ export default function App() {
     if (records[0] && !records.some((record) => record.repo.id === selectedId)) setSelectedId(records[0].repo.id);
   }, [records, selectedId]);
 
-  // Auto-refresh empty windows
-  useEffect(() => {
-    if (reposQuery.isFetched && records.length === 0 && !autoRefreshWindows.includes(window) && !refreshMutation.isPending && category === "All" && !search) {
-      setAutoRefreshWindows((current) => [...current, window]);
-      refreshMutation.mutate();
-    }
-  }, [autoRefreshWindows, category, refreshMutation, records.length, reposQuery.isFetched, search, window]);
-
+  // Keep empty first-run windows user-controlled so startup never triggers network discovery automatically.
   const invalidate = () => void queryClient.invalidateQueries();
 
   const handleWindowChange = (nextWindow: TrendWindow) => {
@@ -549,8 +544,8 @@ function TitleBar({ theme, onToggleTheme, onOpenCommandPalette, onRefresh, isRef
     <header className="titlebar" style={{ WebkitAppRegion: "drag" } as CSSProperties}>
       <div className="titlebar-left">
         <div className="titlebar-brand">
-          <div className="titlebar-logo">SI</div>
-          <span className="titlebar-title">Star Intel Desk</span>
+          <img className="titlebar-logo" src="/icon.png" alt="" aria-hidden="true" />
+          <span className="titlebar-title">{APP_NAME}</span>
         </div>
         <span className="titlebar-subtitle">{t("app.subtitle")}</span>
       </div>

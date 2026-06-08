@@ -3,7 +3,9 @@ $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $rootDir = Split-Path -Parent $scriptDir
 $buildDir = Join-Path $rootDir "build"
+$publicDir = Join-Path $rootDir "public"
 New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
+New-Item -ItemType Directory -Force -Path $publicDir | Out-Null
 
 Add-Type -AssemblyName System.Drawing
 
@@ -26,66 +28,163 @@ function New-RoundedRectanglePath {
   return $path
 }
 
+function New-Pen {
+  param([string]$Color, [float]$Width)
+  $pen = New-Object System.Drawing.Pen ([System.Drawing.ColorTranslator]::FromHtml($Color)), $Width
+  $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+  $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+  return $pen
+}
+
+function New-GitHubResearchFallbackIcon {
+  param([int]$Size)
+
+  $bitmap = New-Object System.Drawing.Bitmap $Size, $Size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+  $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+  $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+  $graphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+  $graphics.Clear([System.Drawing.Color]::Transparent)
+
+  $background = [System.Drawing.ColorTranslator]::FromHtml("#111313")
+  $panel = [System.Drawing.ColorTranslator]::FromHtml("#171918")
+  $accent = [System.Drawing.ColorTranslator]::FromHtml("#d97757")
+  $accentHot = [System.Drawing.ColorTranslator]::FromHtml("#f0a06e")
+  $cyan = [System.Drawing.ColorTranslator]::FromHtml("#7bbbd8")
+  $ivory = [System.Drawing.ColorTranslator]::FromHtml("#f5f2ea")
+  $muted = [System.Drawing.ColorTranslator]::FromHtml("#5d6b67")
+
+  $networkPen = $null
+  $lensPen = $null
+  $handlePen = $null
+  $trendPen = $null
+  $basePen = $null
+  $starBrush = $null
+
+  try {
+    $shape = New-RoundedRectanglePath 10 10 236 236 44
+    $graphics.FillPath((New-Object System.Drawing.SolidBrush $background), $shape)
+    $inner = New-RoundedRectanglePath 25 25 206 206 34
+    $graphics.FillPath((New-Object System.Drawing.SolidBrush $panel), $inner)
+
+    # Repository/network nodes behind the lens.
+    $networkPen = New-Pen "#38413e" 5
+    $graphics.DrawLine($networkPen, 64, 77, 105, 107)
+    $graphics.DrawLine($networkPen, 105, 107, 79, 152)
+    $graphics.DrawLine($networkPen, 105, 107, 152, 83)
+    $graphics.DrawLine($networkPen, 152, 83, 181, 128)
+    $graphics.DrawLine($networkPen, 79, 152, 136, 164)
+    foreach ($node in @(@(64,77,15,$cyan), @(105,107,13,$ivory), @(79,152,12,$accent), @(152,83,12,$cyan), @(181,128,12,$accentHot), @(136,164,10,$ivory))) {
+      $brush = New-Object System.Drawing.SolidBrush $node[3]
+      $graphics.FillEllipse($brush, $node[0] - $node[2] / 2, $node[1] - $node[2] / 2, $node[2], $node[2])
+      $brush.Dispose()
+    }
+
+    # Research lens.
+    $lensPen = New-Pen "#f5f2ea" 13
+    $graphics.DrawEllipse($lensPen, 61, 52, 113, 113)
+    $handlePen = New-Pen "#d97757" 17
+    $graphics.DrawLine($handlePen, 151, 151, 205, 205)
+
+    # Trend signal inside the lens.
+    $trendPen = New-Pen "#d97757" 9
+    $graphics.DrawLines($trendPen, [System.Drawing.Point[]]@(
+      (New-Object System.Drawing.Point 85,128),
+      (New-Object System.Drawing.Point 107,113),
+      (New-Object System.Drawing.Point 126,119),
+      (New-Object System.Drawing.Point 151,91)
+    ))
+    $starBrush = New-Object System.Drawing.SolidBrush $accentHot
+    $graphics.FillEllipse($starBrush, 145, 84, 18, 18)
+
+    # Subtle bottom research baseline.
+    $basePen = New-Pen "#5d6b67" 5
+    $graphics.DrawLine($basePen, 54, 210, 161, 210)
+    $graphics.FillEllipse((New-Object System.Drawing.SolidBrush $muted), 173, 205, 10, 10)
+  }
+  finally {
+    if ($networkPen) { $networkPen.Dispose() }
+    if ($lensPen) { $lensPen.Dispose() }
+    if ($handlePen) { $handlePen.Dispose() }
+    if ($trendPen) { $trendPen.Dispose() }
+    if ($basePen) { $basePen.Dispose() }
+    if ($starBrush) { $starBrush.Dispose() }
+    $graphics.Dispose()
+  }
+
+  return $bitmap
+}
+
+function New-ResizedBitmapFromSource {
+  param([string]$Path, [int]$Size)
+
+  $source = [System.Drawing.Image]::FromFile($Path)
+  $bitmap = New-Object System.Drawing.Bitmap $Size, $Size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+  $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+  try {
+    $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+    $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $graphics.Clear([System.Drawing.Color]::Transparent)
+    $graphics.DrawImage($source, 0, 0, $Size, $Size)
+  }
+  finally {
+    $graphics.Dispose()
+    $source.Dispose()
+  }
+  return $bitmap
+}
+
+function Write-IcoFromBitmap {
+  param([System.Drawing.Bitmap]$Bitmap, [string]$Path)
+
+  $memory = New-Object System.IO.MemoryStream
+  $Bitmap.Save($memory, [System.Drawing.Imaging.ImageFormat]::Png)
+  $pngBytes = $memory.ToArray()
+
+  $file = [System.IO.File]::Create($Path)
+  $writer = New-Object System.IO.BinaryWriter $file
+  try {
+    $writer.Write([UInt16]0)
+    $writer.Write([UInt16]1)
+    $writer.Write([UInt16]1)
+    $writer.Write([Byte]0)
+    $writer.Write([Byte]0)
+    $writer.Write([Byte]0)
+    $writer.Write([Byte]0)
+    $writer.Write([UInt16]1)
+    $writer.Write([UInt16]32)
+    $writer.Write([UInt32]$pngBytes.Length)
+    $writer.Write([UInt32]22)
+    $writer.Write($pngBytes)
+  }
+  finally {
+    $writer.Dispose()
+    $file.Dispose()
+    $memory.Dispose()
+  }
+}
+
 $size = 256
-$bitmap = New-Object System.Drawing.Bitmap $size, $size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-$graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-$graphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
-$graphics.Clear([System.Drawing.Color]::Transparent)
-
-$background = [System.Drawing.ColorTranslator]::FromHtml("#141413")
-$accent = [System.Drawing.ColorTranslator]::FromHtml("#c6613f")
-$clay = [System.Drawing.ColorTranslator]::FromHtml("#d97757")
-$ivory = [System.Drawing.ColorTranslator]::FromHtml("#faf9f5")
-
-$shape = New-RoundedRectanglePath 10 10 236 236 44
-$graphics.FillPath((New-Object System.Drawing.SolidBrush $background), $shape)
-
-$curvePen = New-Object System.Drawing.Pen $accent, 18
-$curvePen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-$curvePen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-$graphics.DrawBezier($curvePen, 36, 182, 88, 180, 118, 153, 147, 116)
-$graphics.DrawBezier($curvePen, 147, 116, 166, 92, 190, 82, 220, 79)
-
-$graphics.FillEllipse((New-Object System.Drawing.SolidBrush $clay), 184, 50, 34, 34)
-
-$fontFamily = New-Object System.Drawing.FontFamily "Segoe UI"
-$font = New-Object System.Drawing.Font $fontFamily, 78, ([System.Drawing.FontStyle]::Bold), ([System.Drawing.GraphicsUnit]::Pixel)
-$format = New-Object System.Drawing.StringFormat
-$format.Alignment = [System.Drawing.StringAlignment]::Center
-$format.LineAlignment = [System.Drawing.StringAlignment]::Center
-$graphics.DrawString("SI", $font, (New-Object System.Drawing.SolidBrush $ivory), (New-Object System.Drawing.RectangleF 0, 34, 256, 170), $format)
-
 $pngPath = Join-Path $buildDir "icon.png"
+$sourcePath = Join-Path $buildDir "icon-source.png"
+$publicPath = Join-Path $publicDir "icon.png"
 $icoPath = Join-Path $buildDir "icon.ico"
-$bitmap.Save($pngPath, [System.Drawing.Imaging.ImageFormat]::Png)
 
-$memory = New-Object System.IO.MemoryStream
-$bitmap.Save($memory, [System.Drawing.Imaging.ImageFormat]::Png)
-$pngBytes = $memory.ToArray()
-
-$file = [System.IO.File]::Create($icoPath)
-$writer = New-Object System.IO.BinaryWriter $file
+$bitmap = $null
 try {
-  $writer.Write([UInt16]0)
-  $writer.Write([UInt16]1)
-  $writer.Write([UInt16]1)
-  $writer.Write([Byte]0)
-  $writer.Write([Byte]0)
-  $writer.Write([Byte]0)
-  $writer.Write([Byte]0)
-  $writer.Write([UInt16]1)
-  $writer.Write([UInt16]32)
-  $writer.Write([UInt32]$pngBytes.Length)
-  $writer.Write([UInt32]22)
-  $writer.Write($pngBytes)
+  if (Test-Path $sourcePath) {
+    $bitmap = New-ResizedBitmapFromSource $sourcePath $size
+  } else {
+    $bitmap = New-GitHubResearchFallbackIcon $size
+    $bitmap.Save($sourcePath, [System.Drawing.Imaging.ImageFormat]::Png)
+  }
+
+  $bitmap.Save($pngPath, [System.Drawing.Imaging.ImageFormat]::Png)
+  $bitmap.Save($publicPath, [System.Drawing.Imaging.ImageFormat]::Png)
+  Write-IcoFromBitmap $bitmap $icoPath
 }
 finally {
-  $writer.Dispose()
-  $file.Dispose()
-  $memory.Dispose()
-  $graphics.Dispose()
-  $bitmap.Dispose()
+  if ($bitmap) { $bitmap.Dispose() }
 }
 
-Write-Host "Created $pngPath and $icoPath"
+Write-Host "Created $pngPath, $icoPath, and $publicPath from $sourcePath"

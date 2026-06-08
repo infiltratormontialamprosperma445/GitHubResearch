@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import {
@@ -26,10 +26,17 @@ import {
   TrendWindow,
   TrendRun
 } from "../../src/shared/types.js";
-import { classifyRepository } from "../../src/shared/classifier.js";
+import { CLASSIFIER_RULE_VERSION, classifyRepository } from "../../src/shared/classifier.js";
+import { APP_NAME } from "../../src/shared/branding.js";
 import { scoreRepository } from "../../src/shared/ranking.js";
 
 type Row = Record<string, string | number | null>;
+
+const BASELINE_CATALOG_VERSION = "2026-06-08-githubresearch-v1";
+const FTS_INDEX_VERSION = "2026-06-08-v1";
+const BASELINE_CATALOG_SETTING = "baselineCatalogVersion";
+const CLASSIFIER_RULE_SETTING = "classifierRuleVersion";
+const FTS_INDEX_SETTING = "ftsIndexVersion";
 
 class QueryCache {
   private cache = new Map<string, { value: unknown; expiresAt: number }>();
@@ -72,25 +79,14 @@ export class AppDatabase {
   ) {}
 
   static async open(): Promise<AppDatabase> {
-    const userData = process.env.STAR_INTEL_USER_DATA ?? join(process.cwd(), ".star-intel-data");
+    const userData = process.env.GITHUB_RESEARCH_USER_DATA ?? join(process.cwd(), ".githubresearch-data");
     mkdirSync(userData, { recursive: true });
-    const dbPath = join(userData, "starIntel.db");
-    const oldDbPath = join(userData, "star-intel.sqlite");
-
-    if (existsSync(oldDbPath) && !existsSync(dbPath)) {
-      console.warn(
-        "Old sql.js database found at",
-        oldDbPath,
-        "— automatic migration requires sql.js. Starting with a fresh database."
-      );
-    }
+    const dbPath = join(userData, "githubResearch.db");
 
     const db = new Database(dbPath);
     const database = new AppDatabase(db, dbPath);
     database.migrate();
     database.seedIfEmpty();
-    database.ensureBaselineCatalog();
-    database.ingestFts();
     return database;
   }
 
@@ -101,6 +97,63 @@ export class AppDatabase {
   /** No-op. better-sqlite3 writes directly to disk. Kept for API compatibility. */
   persist(): void {
     this.queryCache.invalidate();
+  }
+
+  runStartupMaintenance(): { baselineSeeded: boolean; reclassified: number; ftsRebuilt: boolean } {
+    const baselineSeeded = this.ensureBaselineCatalogVersion();
+    const reclassified = this.ensureClassifierRuleVersion();
+    if (baselineSeeded) this.updateSetting(FTS_INDEX_SETTING, FTS_INDEX_VERSION);
+    const ftsRebuilt = baselineSeeded ? false : this.ensureFtsIndexVersion();
+    return { baselineSeeded, reclassified, ftsRebuilt };
+  }
+
+  private settingValue(key: string): string | undefined {
+    const row = this.row<Row>("SELECT value FROM settings WHERE key = ? LIMIT 1", [key]);
+    return row?.value == null ? undefined : String(row.value);
+  }
+
+  private ensureBaselineCatalogVersion(): boolean {
+    if (this.settingValue(BASELINE_CATALOG_SETTING) === BASELINE_CATALOG_VERSION) return false;
+    this.ensureBaselineCatalog();
+    this.updateSetting(BASELINE_CATALOG_SETTING, BASELINE_CATALOG_VERSION);
+    return true;
+  }
+
+  private ensureClassifierRuleVersion(): number {
+    if (this.settingValue(CLASSIFIER_RULE_SETTING) === CLASSIFIER_RULE_VERSION) return 0;
+    const reclassified = this.reclassifyRepositories();
+    this.updateSetting(CLASSIFIER_RULE_SETTING, CLASSIFIER_RULE_VERSION);
+    return reclassified;
+  }
+
+  private ensureFtsIndexVersion(): boolean {
+    if (this.settingValue(FTS_INDEX_SETTING) === FTS_INDEX_VERSION) return false;
+    this.ingestFts();
+    this.updateSetting(FTS_INDEX_SETTING, FTS_INDEX_VERSION);
+    return true;
+  }
+
+  private reclassifyRepositories(): number {
+    const resultRows = this.rows<Row>(
+      `SELECT r.* FROM repositories r
+       LEFT JOIN classifications c ON c.repo_id = r.id
+       WHERE COALESCE(c.overridden, 0) = 0`
+    );
+    const repoIds: string[] = [];
+    const reclassify = this.db.transaction(() => {
+      for (const row of resultRows) {
+        const repo = repoFromRow(row);
+        this.upsertClassification(classifyRepository(repo));
+        for (const trendWindow of ["daily", "weekly", "monthly"] as const) {
+          this.recomputeRepo(repo.id, trendWindow);
+        }
+        repoIds.push(repo.id);
+      }
+    });
+    reclassify();
+    this.syncFtsForRepoBatch(repoIds);
+    this.queryCache.invalidate();
+    return repoIds.length;
   }
 
   backupTo(targetPath: string): string {
@@ -840,8 +893,8 @@ export class AppDatabase {
       `SELECT r.full_name, r.url, c.primary_category, c.secondary_category, n.status, n.tags, n.markdown
        FROM notes n JOIN repositories r ON r.id = n.repo_id
        JOIN classifications c ON c.repo_id = r.id ORDER BY n.updated_at DESC`);
-    if (!resultRows.length) return "# Star Intel Desk Learning Notes\n\nNo notes yet.\n";
-    return ["# Star Intel Desk Learning Notes", "",
+    if (!resultRows.length) return `# ${APP_NAME} Learning Notes\n\nNo notes yet.\n`;
+    return [`# ${APP_NAME} Learning Notes`, "",
       ...resultRows.flatMap((row) => [`## ${row.full_name}`, "", `- URL: ${row.url}`,
         `- Category: ${row.primary_category} / ${row.secondary_category}`,
         `- Status: ${row.status}`, `- Tags: ${safeJsonArray(row.tags).join(", ") || "none"}`,

@@ -1,7 +1,7 @@
 {
-  "name": "star-intel-desk",
-  "version": "1.0.0",
-  "description": "Local-first desktop GitHub trending intelligence workspace. Track trending repositories with AI-powered classification across 6 data sources.",
+  "name": "githubresearch",
+  "version": "1.0.1",
+  "description": "Local-first desktop GitHub research intelligence workspace. Track and classify trending repositories across AI, developer tools, and open-source ecosystems.",
   "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "npm run build:main && concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
@@ -38,8 +38,9 @@
   "license": "MIT",
   "type": "module",
   "build": {
-    "appId": "com.star-intel-desk.app",
-    "productName": "Star Intel Desk",
+    "appId": "com.githubresearch.app",
+    "productName": "GitHubResearch",
+    "executableName": "GitHubResearch",
     "copyright": "Copyright © 2025 zrz2004",
     "asar": true,
     "asarUnpack": [
@@ -52,7 +53,7 @@
       "buildResources": "build",
       "output": "release"
     },
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "artifactName": "GitHubResearch-${version}-${os}-${arch}.${ext}",
     "files": [
       "dist/**",
       "dist-electron/**",
@@ -106,11 +107,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Star Intel Desk",
+      "shortcutName": "GitHubResearch",
       "deleteAppDataOnUninstall": false
     },
     "portable": {
-      "artifactName": "${productName}-${version}-portable-${arch}.${ext}"
+      "artifactName": "GitHubResearch-${version}-portable-${arch}.${ext}"
     },
     "mac": {
       "target": [
@@ -157,13 +158,13 @@
       ],
       "category": "Development",
       "synopsis": "GitHub Intelligence Workspace",
-      "description": "Local-first desktop intelligence workspace for tracking trending GitHub repositories with AI classification."
+      "description": "Local-first research workspace for tracking, searching, and classifying trending GitHub repositories."
     },
     "publish": [
       {
         "provider": "github",
         "owner": "zrz2004",
-        "repo": "GithubSearch",
+        "repo": "GitHubResearch",
         "releaseType": "release"
       }
     ]

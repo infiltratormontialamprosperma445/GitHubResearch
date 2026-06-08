@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   Star Intel Desk — v2.0 Dark-First Design System
+   GitHubResearch — Dark-First Design System
    Inspired by Claude Code CLI Desktop / Codex Desktop
    ═══════════════════════════════════════════════════════════════ */
 
@@ -282,15 +282,10 @@ a:focus-visible,
 .titlebar-logo {
   width: 24px;
   height: 24px;
-  display: grid;
-  place-items: center;
-  border-radius: 5px;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-active) 100%);
+  display: block;
+  border-radius: 6px;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset, 0 6px 18px var(--accent-glow);
-  color: #fff;
-  font-weight: 700;
-  font-size: 10px;
-  letter-spacing: 0.02em;
+  object-fit: contain;
 }
 
 .titlebar-title {

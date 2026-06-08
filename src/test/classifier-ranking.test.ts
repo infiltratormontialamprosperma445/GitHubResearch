@@ -36,6 +36,9 @@ describe("classifier", () => {
       { name: "chatgpt-cli", description: "ChatGPT CLI coding agent for terminal agent workflows.", topics: ["chatgpt", "cli", "llm", "coding-agent"], expected: "Coding Agents" },
       { name: "mcp-server-example", description: "MCP server with tool calling and computer use adapters.", topics: ["mcp-server", "tools"], expected: "MCP/Tools" },
       { name: "prompt-library", description: "System prompt templates and prompt workflow manager.", topics: ["prompt-library", "prompts"], expected: "Prompts/Workflows" },
+      { name: "claude-skills", description: "Claude Code 技能插件和斜杠命令集合.", topics: ["claude", "skills", "插件"], expected: "Skills/Plugins" },
+      { name: "prompt-cn", description: "中文提示词库，系统提示词模板和 prompt workflow manager.", topics: ["提示词", "prompts"], expected: "Prompts/Workflows" },
+      { name: "openai-chatgpt-tools", description: "OpenAI ChatGPT 大模型应用 examples.", topics: ["openai", "chatgpt", "llm"], expected: "LLM Apps" },
       { name: "aider-codex-opencode", description: "Aider, Codex, and OpenHands style software engineering agent.", topics: ["aider", "codex", "openhands"], expected: "Coding Agents" }
     ];
 

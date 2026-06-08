@@ -1,6 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Star Intel Desk icon">
-  <rect width="256" height="256" rx="44" fill="#141413"/>
-  <path d="M36 182c48-2 83-22 111-58 19-25 40-42 73-45" fill="none" stroke="#c6613f" stroke-width="18" stroke-linecap="round"/>
-  <circle cx="201" cy="67" r="17" fill="#d97757"/>
-  <text x="128" y="153" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="82" font-weight="700" letter-spacing="0" fill="#faf9f5">SI</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="GitHubResearch icon">
+  <defs>
+    <linearGradient id="bg" x1="20" y1="20" x2="236" y2="236" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#171918"/>
+      <stop offset="1" stop-color="#0d0f0e"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="80" y1="84" x2="210" y2="210" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f0a06e"/>
+      <stop offset="1" stop-color="#d97757"/>
+    </linearGradient>
+  </defs>
+  <rect x="10" y="10" width="236" height="236" rx="44" fill="#111313"/>
+  <rect x="25" y="25" width="206" height="206" rx="34" fill="url(#bg)"/>
+  <path d="M64 77 105 107 79 152M105 107l47-24 29 45M79 152l57 12" fill="none" stroke="#38413e" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <g>
+    <circle cx="64" cy="77" r="7.5" fill="#7bbbd8"/>
+    <circle cx="105" cy="107" r="6.5" fill="#f5f2ea"/>
+    <circle cx="79" cy="152" r="6" fill="#d97757"/>
+    <circle cx="152" cy="83" r="6" fill="#7bbbd8"/>
+    <circle cx="181" cy="128" r="6" fill="#f0a06e"/>
+    <circle cx="136" cy="164" r="5" fill="#f5f2ea"/>
+  </g>
+  <circle cx="117.5" cy="108.5" r="56.5" fill="none" stroke="#f5f2ea" stroke-width="13"/>
+  <path d="M151 151 205 205" stroke="url(#accent)" stroke-width="17" stroke-linecap="round"/>
+  <path d="M85 128 107 113 126 119 151 91" fill="none" stroke="#d97757" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="154" cy="93" r="9" fill="#f0a06e"/>
+  <path d="M54 210h107" stroke="#5d6b67" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="178" cy="210" r="5" fill="#5d6b67"/>
 </svg>

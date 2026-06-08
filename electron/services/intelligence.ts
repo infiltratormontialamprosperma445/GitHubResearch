@@ -1,6 +1,7 @@
 import { app, Notification, safeStorage } from "electron";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { APP_NAME } from "../../src/shared/branding.js";
 import { AppDatabase } from "./database.js";
 import { maybeRefineClassification } from "./aiClassifier.js";
 import {
@@ -533,6 +534,7 @@ export class IntelligenceService {
     for (const trendWindow of ["daily", "weekly", "monthly"] as const) {
       this.db.recomputeRepo(input.repoId, trendWindow);
     }
+    this.db.syncSearchIndexForRepo(input.repoId);
     return this.db.getRepo(input.repoId);
   }
 
@@ -544,7 +546,7 @@ export class IntelligenceService {
     const settings = this.getSettings();
     const backupDir = settings.backupPath || join(dirname(this.db.storagePath), "backups");
     mkdirSync(backupDir, { recursive: true });
-    const filename = `star-intel-${new Date().toISOString().replace(/[:.]/g, "-")}.sqlite`;
+    const filename = `githubresearch-${new Date().toISOString().replace(/[:.]/g, "-")}.sqlite`;
     return this.db.backupTo(join(backupDir, filename));
   }
 
@@ -738,7 +740,7 @@ export class IntelligenceService {
   private notifyRefresh(discovered: number, warningCount: number, settings: Settings): void {
     if (!settings.enableNotifications || !Notification.isSupported()) return;
     new Notification({
-      title: "Star Intel Desk updated",
+      title: `${APP_NAME} updated`,
       body: `${discovered} observations collected${warningCount ? `, ${warningCount} sources need attention` : ""}.`
     }).show();
   }

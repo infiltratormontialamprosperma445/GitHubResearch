@@ -24,6 +24,15 @@ async function init(): Promise<void> {
     db = await AppDatabase.open();
     service = new IntelligenceService(db);
     console.log("[worker] Database and IntelligenceService initialized.");
+    post({ type: "WORKER_READY" });
+    setTimeout(() => {
+      try {
+        const stats = db.runStartupMaintenance();
+        post({ type: "WORKER_MAINTENANCE_DONE", stats });
+      } catch (maintenanceError) {
+        console.warn("[worker] Startup maintenance failed:", maintenanceError instanceof Error ? maintenanceError.message : String(maintenanceError));
+      }
+    }, 25);
   } catch (error) {
     console.error("[worker] Failed to initialize:", error instanceof Error ? error.message : String(error));
     // Send an error message so the main process knows initialization failed

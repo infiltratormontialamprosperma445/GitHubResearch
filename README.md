@@ -1,23 +1,23 @@
 <div align="center">
-  <img src="build/icon.png" alt="Star Intel Desk" width="120" height="120">
-  <h1>Star Intel Desk</h1>
+  <img src="build/icon.png" alt="GitHubResearch" width="120" height="120">
+  <h1>GitHubResearch</h1>
   <h3>Local-First GitHub Intelligence Workspace</h3>
   <h3>本地优先的 GitHub 情报工作台</h3>
   <p>Track trending repositories with AI-powered classification across 6 data sources<br>
   跨 6 大数据源追踪热门仓库，AI 驱动智能分类</p>
 
   <p>
-    <a href="https://github.com/zrz2004/GithubSearch/releases/latest">
-      <img src="https://img.shields.io/github/v/release/zrz2004/GithubSearch?style=flat-square&color=d97757" alt="Release">
+    <a href="https://github.com/zrz2004/GitHubResearch/releases/latest">
+      <img src="https://img.shields.io/github/v/release/zrz2004/GitHubResearch?style=flat-square&color=d97757" alt="Release">
     </a>
-    <a href="https://github.com/zrz2004/GithubSearch/blob/main/LICENSE">
-      <img src="https://img.shields.io/github/license/zrz2004/GithubSearch?style=flat-square" alt="License">
+    <a href="https://github.com/zrz2004/GitHubResearch/blob/main/LICENSE">
+      <img src="https://img.shields.io/github/license/zrz2004/GitHubResearch?style=flat-square" alt="License">
     </a>
-    <a href="https://github.com/zrz2004/GithubSearch/stargazers">
-      <img src="https://img.shields.io/github/stars/zrz2004/GithubSearch?style=flat-square" alt="Stars">
+    <a href="https://github.com/zrz2004/GitHubResearch/stargazers">
+      <img src="https://img.shields.io/github/stars/zrz2004/GitHubResearch?style=flat-square" alt="Stars">
     </a>
-    <a href="https://github.com/zrz2004/GithubSearch/issues">
-      <img src="https://img.shields.io/github/issues/zrz2004/GithubSearch?style=flat-square" alt="Issues">
+    <a href="https://github.com/zrz2004/GitHubResearch/issues">
+      <img src="https://img.shields.io/github/issues/zrz2004/GitHubResearch?style=flat-square" alt="Issues">
     </a>
     <img src="https://img.shields.io/badge/Electron-41-47848F?style=flat-square&logo=electron" alt="Electron">
     <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react" alt="React">
@@ -54,8 +54,8 @@
 ### Install & Run
 
 ```bash
-git clone https://github.com/zrz2004/GithubSearch.git
-cd GithubSearch
+git clone https://github.com/zrz2004/GitHubResearch.git
+cd GitHubResearch
 npm install
 npm run dev
 ```
@@ -75,15 +75,15 @@ npm run dist:linux
 
 ## Download
 
-### Latest Release: v1.0.0
+### Latest Release: v1.0.1
 
 | Platform | Architecture | Download |
 |----------|:---:|:---:|
-| **Windows** | x64 | [NSIS Installer](https://github.com/zrz2004/GithubSearch/releases/latest) • [Portable](https://github.com/zrz2004/GithubSearch/releases/latest) |
-| **macOS** | Intel / Apple Silicon | [DMG](https://github.com/zrz2004/GithubSearch/releases/latest) |
-| **Linux** | x64 | [AppImage](https://github.com/zrz2004/GithubSearch/releases/latest) • [deb](https://github.com/zrz2004/GithubSearch/releases/latest) |
+| **Windows** | x64 | [NSIS Installer](https://github.com/zrz2004/GitHubResearch/releases/latest) • [Portable](https://github.com/zrz2004/GitHubResearch/releases/latest) |
+| **macOS** | Intel / Apple Silicon | [DMG](https://github.com/zrz2004/GitHubResearch/releases/latest) |
+| **Linux** | x64 | [AppImage](https://github.com/zrz2004/GitHubResearch/releases/latest) • [deb](https://github.com/zrz2004/GitHubResearch/releases/latest) |
 
-[View All Releases](https://github.com/zrz2004/GithubSearch/releases)
+[View All Releases](https://github.com/zrz2004/GitHubResearch/releases)
 
 ---
 
@@ -97,8 +97,8 @@ npm run dist:linux
 ### 安装与运行
 
 ```bash
-git clone https://github.com/zrz2004/GithubSearch.git
-cd GithubSearch
+git clone https://github.com/zrz2004/GitHubResearch.git
+cd GitHubResearch
 npm install
 npm run dev
 ```
@@ -118,15 +118,15 @@ npm run dist:linux
 
 ## 下载
 
-### 最新版本: v1.0.0
+### 最新版本: v1.0.1
 
 | 平台 | 架构 | 下载 |
 |------|:---:|:---:|
-| **Windows** | x64 | [NSIS 安装包](https://github.com/zrz2004/GithubSearch/releases/latest) • [便携版](https://github.com/zrz2004/GithubSearch/releases/latest) |
-| **macOS** | Intel / Apple Silicon | [DMG](https://github.com/zrz2004/GithubSearch/releases/latest) |
-| **Linux** | x64 | [AppImage](https://github.com/zrz2004/GithubSearch/releases/latest) • [deb](https://github.com/zrz2004/GithubSearch/releases/latest) |
+| **Windows** | x64 | [NSIS 安装包](https://github.com/zrz2004/GitHubResearch/releases/latest) • [便携版](https://github.com/zrz2004/GitHubResearch/releases/latest) |
+| **macOS** | Intel / Apple Silicon | [DMG](https://github.com/zrz2004/GitHubResearch/releases/latest) |
+| **Linux** | x64 | [AppImage](https://github.com/zrz2004/GitHubResearch/releases/latest) • [deb](https://github.com/zrz2004/GitHubResearch/releases/latest) |
 
-[查看所有版本](https://github.com/zrz2004/GithubSearch/releases)
+[查看所有版本](https://github.com/zrz2004/GitHubResearch/releases)
 
 ---
 
@@ -206,7 +206,7 @@ GitHub Token is critical for successful data refresh:
 
 1. Go to https://github.com/settings/tokens
 2. Click **Generate new token (classic)**
-3. Name it `star-intel-desk`, check **public_repo** scope
+3. Name it `githubresearch`, check **public_repo** scope
 4. Paste into **Settings > GitHub Token**, click **Save**, then **Test GitHub**
 
 ### Step 2: Configure Proxy (If Needed)
@@ -243,7 +243,7 @@ GitHub Token 对数据刷新至关重要：
 
 1. 访问 https://github.com/settings/tokens
 2. 点击 **Generate new token (classic)**
-3. 命名为 `star-intel-desk`，勾选 **public_repo** 权限
+3. 命名为 `githubresearch`，勾选 **public_repo** 权限
 4. 粘贴到 **设置 > GitHub Token**，点击 **保存**，然后 **测试 GitHub**
 
 ### 第二步：配置代理（如需要）
@@ -357,7 +357,7 @@ Low-confidence classifications are sent to an OpenAI-compatible API for secondar
 ### Project Structure
 
 ```
-star-intel-desk/
+githubresearch/
 ├── electron/                    # Electron main process
 │   ├── main.ts                  # App entry, Worker lifecycle, IPC forwarding
 │   ├── preload.ts               # Context bridge (AppApiV2)
@@ -413,7 +413,7 @@ star-intel-desk/
 ### 项目结构
 
 ```
-star-intel-desk/
+githubresearch/
 ├── electron/                    # Electron 主进程
 │   ├── main.ts                  # 应用入口、Worker 生命周期、IPC 转发
 │   ├── preload.ts               # 上下文桥接 (AppApiV2)
@@ -698,8 +698,8 @@ MIT 许可证 — 详见 [LICENSE](LICENSE)。
   <p>Built with Electron, React, and TypeScript. Inspired by Claude.ai design language.<br>
   基于 Electron、React 和 TypeScript 构建。设计灵感来自 Claude.ai。</p>
   <p>
-    <a href="https://github.com/zrz2004/GithubSearch">GitHub</a> •
-    <a href="https://github.com/zrz2004/GithubSearch/issues">Report Bug / 报告问题</a> •
-    <a href="https://github.com/zrz2004/GithubSearch/discussions">Discussions / 讨论</a>
+    <a href="https://github.com/zrz2004/GitHubResearch">GitHub</a> •
+    <a href="https://github.com/zrz2004/GitHubResearch/issues">Report Bug / 报告问题</a> •
+    <a href="https://github.com/zrz2004/GitHubResearch/discussions">Discussions / 讨论</a>
   </p>
 </div>

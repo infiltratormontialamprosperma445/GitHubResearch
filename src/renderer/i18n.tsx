@@ -5,7 +5,7 @@ export type Locale = "en" | "zh";
 
 type TranslationMap = Record<string, string>;
 
-const STORAGE_KEY = "star-intel-locale";
+const STORAGE_KEY = "githubresearch-locale";
 
 const translations: Record<Locale, TranslationMap> = {
   en: {
