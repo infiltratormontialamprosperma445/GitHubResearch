@@ -1,6 +1,6 @@
 {
   "name": "githubresearch",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Local-first desktop GitHub research intelligence workspace. Track and classify trending repositories across AI, developer tools, and open-source ecosystems.",
   "main": "dist-electron/electron/main.js",
   "scripts": {
