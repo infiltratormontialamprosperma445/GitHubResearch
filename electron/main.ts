@@ -91,11 +91,10 @@ async function bootstrap(): Promise<void> {
     const start = () => {
       if (!worker) startWorker();
     };
-    if (mainWindow?.webContents.isLoading()) {
-      mainWindow.webContents.once("did-finish-load", () => setTimeout(start, 150));
-    } else {
-      setTimeout(start, 150);
-    }
+    // Fork the data worker immediately instead of waiting for did-finish-load.
+    // The renderer now has an inline boot shell, so starting DB open in parallel
+    // reduces the first dashboard/list query wait without showing a white window.
+    setTimeout(start, 0);
   } else {
     console.log("[main] Utility worker disabled; using main-process data service.");
   }

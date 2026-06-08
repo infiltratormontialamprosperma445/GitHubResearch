@@ -279,13 +279,42 @@ a:focus-visible,
   gap: 8px;
 }
 
-.titlebar-logo {
+.titlebar-logo-wrap {
+  position: relative;
   width: 24px;
   height: 24px;
-  display: block;
-  border-radius: 6px;
+  flex: 0 0 24px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--accent-subtle), rgba(123, 187, 216, 0.14));
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset, 0 6px 18px var(--accent-glow);
+}
+
+.titlebar-logo {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  display: block;
   object-fit: contain;
+}
+
+.titlebar-logo-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: -0.06em;
+}
+
+.titlebar-logo-fallback.under-image {
+  opacity: 0;
 }
 
 .titlebar-title {
@@ -453,6 +482,133 @@ a:focus-visible,
   font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+.ai-lanes {
+  padding-top: 2px;
+  border-top: 1px solid var(--border);
+}
+
+.ai-lanes-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}
+
+.sidebar-help {
+  padding: 0 10px 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.ai-lane-all {
+  margin-bottom: 6px;
+}
+
+.ai-lane-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-lane-button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(255,255,255,0.02), rgba(217,119,87,0.03));
+  color: var(--text-secondary);
+  text-align: left;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.ai-lane-button:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-hover);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.ai-lane-button.active {
+  border-color: rgba(217, 119, 87, 0.42);
+  background: linear-gradient(135deg, var(--accent-subtle), rgba(123, 187, 216, 0.08));
+  color: var(--text-primary);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+}
+
+.ai-lane-badge {
+  width: 32px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.ai-lane-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ai-lane-copy strong,
+.ai-lane-copy em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-lane-copy strong {
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.ai-lane-copy em {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.ai-lane-button small {
+  min-width: 18px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.active-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 5px 8px;
+  border: 1px solid rgba(217, 119, 87, 0.28);
+  border-radius: 999px;
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+
+.active-filter-pill:hover {
+  transform: translateY(-1px);
+  background: rgba(217, 119, 87, 0.18);
 }
 
 .sidebar-footer {

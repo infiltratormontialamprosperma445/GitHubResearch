@@ -12,18 +12,39 @@ type RuleMatch = {
   confidence: number;
 };
 
-export const CLASSIFIER_RULE_VERSION = "2026-06-08-ai-zh-v1";
+export const CLASSIFIER_RULE_VERSION = "2026-06-08-ai-detail-v2";
 
 const AI_RULES: RuleMatch[] = [
   {
     primary: "AI",
+    secondary: "Claude Code",
+    keywords: [
+      "claude code", "claude-code", "claude coding", "claude cli", "claude agent", "claude desktop", "claude-code-sdk",
+      "anthropic code", "anthropic coding agent", "claude slash command", "claude command", "claude subagent", "claude sub-agent",
+      "claude mcp", "claude tool", "claude skill", "claude skills",
+      "claude 编程", "claude 代码", "claude 技能", "claude 插件", "claude 斜杠命令", "claude 智能体"
+    ],
+    confidence: 0.96
+  },
+  {
+    primary: "AI",
+    secondary: "Codex/CLI",
+    keywords: [
+      "codex", "codex cli", "openai codex", "codex agent", "codex coding", "codex terminal", "codex tools",
+      "codex workflow", "codex extension", "codex prompt", "gpt codex", "openai coding agent",
+      "codex 编程", "codex 代码", "codex 命令行", "codex 智能体"
+    ],
+    confidence: 0.95
+  },
+  {
+    primary: "AI",
     secondary: "Coding Agents",
     keywords: [
-      "claude code", "claude-code", "chatgpt cli", "codex", "codex cli", "coding agent", "code agent", "ai coding", "devin",
-      "swe-agent", "swe-bench", "code generation", "code assistant", "ai developer",
+      "chatgpt cli", "coding agent", "code agent", "ai coding", "devin",
+      "swe-agent", "swe-bench", "code generation", "code assistant", "ai developer", "ai engineer",
       "software engineering agent", "terminal agent", "ide agent", "cursor", "windsurf", "aider", "continue dev",
-      "openhands", "open hands", "cline", "roo code", "roo-code", "opencode", "plandex", "codeium",
-      "编程智能体", "代码智能体", "编码智能体", "代码助手", "ai 编程", "ai 编码", "终端智能体", "ide 智能体"
+      "openhands", "open hands", "cline", "roo code", "roo-code", "opencode", "plandex", "codeium", "copilot workspace",
+      "编程智能体", "代码智能体", "编码智能体", "代码助手", "ai 编程", "ai 编码", "终端智能体", "ide 智能体", "软件工程智能体"
     ],
     confidence: 0.93
   },
@@ -31,35 +52,37 @@ const AI_RULES: RuleMatch[] = [
     primary: "AI",
     secondary: "Skills/Plugins",
     keywords: [
-      "skill", "skills", "plugin", "plugins", "tool plugin", "extension",
-      "ai plugin", "agent skill", "agent skills", "mcp plugin", "tool extension",
-      "slash command", "slash-command", "custom command", "command palette",
-      "技能", "插件", "扩展", "工具插件", "智能体技能", "agent 技能", "mcp 插件", "斜杠命令", "自定义命令"
+      "skill", "skills", "ai skill", "agent skill", "agent skills", "claude skill", "claude skills",
+      "plugin", "plugins", "tool plugin", "extension", "extensions", "add-on", "addon",
+      "ai plugin", "mcp plugin", "tool extension", "ide extension", "vscode extension",
+      "slash command", "slash-command", "custom command", "command palette", "prompt command", "workflow command",
+      "技能", "插件", "扩展", "工具插件", "智能体技能", "agent 技能", "mcp 插件", "claude 技能", "斜杠命令", "自定义命令", "命令插件"
     ],
-    confidence: 0.88
+    confidence: 0.9
   },
   {
     primary: "AI",
     secondary: "Prompts/Workflows",
     keywords: [
-      "prompt library", "prompt manager", "prompt workflow", "prompt engineering",
-      "prompt template", "prompt templates", "system prompt", "chatgpt prompts",
-      "ai prompts", "llm prompts", "promptflow", "prompt flow",
+      "prompt", "prompts", "prompt library", "prompt manager", "prompt workflow", "prompt engineering",
+      "prompt template", "prompt templates", "system prompt", "chatgpt prompts", "claude prompts", "codex prompts",
+      "ai prompts", "llm prompts", "promptflow", "prompt flow", "prompt ops", "promptops", "agent workflow", "llm workflow",
       "提示词", "提示语", "提示词库", "提示词管理", "提示词工作流", "提示词工程",
-      "提示词模板", "系统提示词", "工作流提示词", "chatgpt 提示词", "大模型提示词"
+      "提示词模板", "系统提示词", "工作流提示词", "chatgpt 提示词", "claude 提示词", "codex 提示词", "大模型提示词", "智能体工作流"
     ],
-    confidence: 0.87
+    confidence: 0.89
   },
   {
     primary: "AI",
     secondary: "MCP/Tools",
     keywords: [
       "mcp", "model context protocol", "tool calling", "tools server", "agent tool",
-      "mcp server", "mcp-server", "mcp client", "mcp-client", "function calling", "tool use", "tool-use",
-      "computer use", "tool server", "tool adapter",
-      "模型上下文协议", "工具调用", "函数调用", "工具服务器", "mcp 服务", "mcp 客户端", "工具适配器"
+      "mcp server", "mcp-server", "mcp servers", "mcp client", "mcp-client", "mcp gateway", "mcp registry",
+      "mcp marketplace", "mcp tools", "mcp adapter", "mcp protocol", "function calling", "tool use", "tool-use",
+      "computer use", "tool server", "tool adapter", "agent tools", "tool router", "context server",
+      "模型上下文协议", "工具调用", "函数调用", "工具服务器", "mcp 服务", "mcp 服务器", "mcp 客户端", "mcp 网关", "mcp 工具", "工具适配器"
     ],
-    confidence: 0.91
+    confidence: 0.93
   },
   {
     primary: "AI",
@@ -81,6 +104,27 @@ const AI_RULES: RuleMatch[] = [
       "智能体", "代理", "ai 助手", "对话智能体", "任务智能体", "规划智能体"
     ],
     confidence: 0.84
+  },
+  {
+    primary: "AI",
+    secondary: "OpenAI/GPT",
+    keywords: [
+      "openai", "chatgpt", "gpt", "gpt-4", "gpt-4o", "gpt-5", "gpt api", "openai api",
+      "responses api", "assistants api", "assistant api", "openai compatible", "gpts", "custom gpt",
+      "chat cpt", "cpt ai", "openai sdk", "openai agents sdk",
+      "openai 应用", "openai 接口", "chatgpt", "gpt 应用", "gpt 工具", "兼容 openai", "大模型 api"
+    ],
+    confidence: 0.87
+  },
+  {
+    primary: "AI",
+    secondary: "Claude/Anthropic",
+    keywords: [
+      "anthropic", "claude", "claude api", "claude sdk", "claude desktop", "claude model", "claude opus", "claude sonnet", "claude haiku",
+      "anthropic api", "anthropic sdk", "claude mcp", "claude prompts", "claude workflow",
+      "anthropic 接口", "claude 应用", "claude 模型", "claude 工具", "claude 工作流"
+    ],
+    confidence: 0.86
   },
   {
     primary: "AI",
@@ -140,9 +184,8 @@ const AI_RULES: RuleMatch[] = [
     primary: "AI",
     secondary: "LLM Apps",
     keywords: [
-      "llm", "chatbot", "openai", "anthropic", "gemini", "copilot",
-      "gpt", "claude", "chatgpt", "custom gpt", "gpts", "assistants api", "assistant api",
-      "responses api", "openai compatible", "langchain", "llama", "mistral", "deepseek",
+      "llm", "chatbot", "ai app", "llm app", "language model app", "copilot",
+      "gemini", "langchain", "llama", "mistral", "deepseek",
       "qwen", "phi model", "small language model", "on-device llm",
       "大模型", "语言模型", "聊天机器人", "对话机器人", "通义千问", "千问", "本地大模型", "端侧大模型"
     ],

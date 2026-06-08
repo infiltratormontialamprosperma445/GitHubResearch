@@ -31,14 +31,17 @@ describe("classifier", () => {
 
   it("recognizes coding agents, prompts, OpenAI, ChatGPT, and MCP projects", () => {
     const cases: Array<{ name: string; description: string; topics: string[]; expected: string }> = [
-      { name: "claude-code-tools", description: "Claude Code terminal coding agent with slash commands.", topics: ["claude-code", "coding-agent", "cli"], expected: "Coding Agents" },
+      { name: "claude-code-tools", description: "Claude Code terminal coding agent with slash commands.", topics: ["claude-code", "coding-agent", "cli"], expected: "Claude Code" },
       { name: "openai-agents-sdk", description: "OpenAI Agents SDK examples for multi-agent workflows.", topics: ["openai", "agents", "sdk"], expected: "Agent Frameworks" },
       { name: "chatgpt-cli", description: "ChatGPT CLI coding agent for terminal agent workflows.", topics: ["chatgpt", "cli", "llm", "coding-agent"], expected: "Coding Agents" },
       { name: "mcp-server-example", description: "MCP server with tool calling and computer use adapters.", topics: ["mcp-server", "tools"], expected: "MCP/Tools" },
       { name: "prompt-library", description: "System prompt templates and prompt workflow manager.", topics: ["prompt-library", "prompts"], expected: "Prompts/Workflows" },
       { name: "claude-skills", description: "Claude Code 技能插件和斜杠命令集合.", topics: ["claude", "skills", "插件"], expected: "Skills/Plugins" },
       { name: "prompt-cn", description: "中文提示词库，系统提示词模板和 prompt workflow manager.", topics: ["提示词", "prompts"], expected: "Prompts/Workflows" },
-      { name: "openai-chatgpt-tools", description: "OpenAI ChatGPT 大模型应用 examples.", topics: ["openai", "chatgpt", "llm"], expected: "LLM Apps" },
+      { name: "openai-chatgpt-tools", description: "OpenAI ChatGPT 大模型应用 examples.", topics: ["openai", "chatgpt", "llm"], expected: "OpenAI/GPT" },
+      { name: "chat-cpt-demo", description: "Chat CPT / GPT app with OpenAI-compatible API examples.", topics: ["gpt", "openai-compatible"], expected: "OpenAI/GPT" },
+      { name: "claude-sdk-prompts", description: "Anthropic Claude API workflow and reusable Claude prompts.", topics: ["anthropic", "claude", "llm"], expected: "Claude/Anthropic" },
+      { name: "codex-cli", description: "OpenAI Codex CLI coding agent for terminal software engineering loops.", topics: ["codex", "openai-codex", "cli"], expected: "Codex/CLI" },
       { name: "aider-codex-opencode", description: "Aider, Codex, and OpenHands style software engineering agent.", topics: ["aider", "codex", "openhands"], expected: "Coding Agents" }
     ];
 

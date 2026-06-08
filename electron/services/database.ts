@@ -38,6 +38,14 @@ const BASELINE_CATALOG_SETTING = "baselineCatalogVersion";
 const CLASSIFIER_RULE_SETTING = "classifierRuleVersion";
 const FTS_INDEX_SETTING = "ftsIndexVersion";
 
+function splitSearchTerms(search: string): string[] {
+  return search
+    .split(/[\s,|]+/)
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 2)
+    .slice(0, 8);
+}
+
 class QueryCache {
   private cache = new Map<string, { value: unknown; expiresAt: number }>();
   private defaultTtl: number;
@@ -728,9 +736,18 @@ export class AppDatabase {
     const where: string[] = ["r.id = c.repo_id", "r.id = rs.repo_id", "rs.trend_window = ?"];
     const params: Array<string | number> = [filters.window === "historical" ? "monthly" : filters.window];
     if (filters.search) {
-      where.push("(r.full_name LIKE ? OR r.description LIKE ? OR r.topics LIKE ?)");
-      const needle = `%${filters.search}%`;
-      params.push(needle, needle, needle);
+      const terms = splitSearchTerms(filters.search);
+      if (terms.length > 1) {
+        where.push(`(${terms.map(() => "(r.full_name LIKE ? OR r.description LIKE ? OR r.topics LIKE ? OR c.secondary_category LIKE ? OR c.tags LIKE ?)").join(" OR ")})`);
+        for (const term of terms) {
+          const needle = `%${term}%`;
+          params.push(needle, needle, needle, needle, needle);
+        }
+      } else {
+        where.push("(r.full_name LIKE ? OR r.description LIKE ? OR r.topics LIKE ? OR c.secondary_category LIKE ? OR c.tags LIKE ?)");
+        const needle = `%${filters.search}%`;
+        params.push(needle, needle, needle, needle, needle);
+      }
     }
     if (filters.primaryCategory && filters.primaryCategory !== "All") {
       where.push("c.primary_category = ?"); params.push(filters.primaryCategory);

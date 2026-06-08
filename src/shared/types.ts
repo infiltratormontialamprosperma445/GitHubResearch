@@ -17,10 +17,14 @@ export type PrimaryCategory =
 export type AiSubcategory =
   | "Agents"
   | "Coding Agents"
+  | "Claude Code"
+  | "Codex/CLI"
   | "Agent Frameworks"
   | "Skills/Plugins"
   | "Prompts/Workflows"
   | "MCP/Tools"
+  | "OpenAI/GPT"
+  | "Claude/Anthropic"
   | "RAG/Knowledge"
   | "LLM Apps"
   | "Model Serving"
@@ -392,10 +396,14 @@ export const PRIMARY_CATEGORIES: PrimaryCategory[] = [
 export const AI_SUBCATEGORIES: AiSubcategory[] = [
   "Agents",
   "Coding Agents",
+  "Claude Code",
+  "Codex/CLI",
   "Agent Frameworks",
   "Skills/Plugins",
   "Prompts/Workflows",
   "MCP/Tools",
+  "OpenAI/GPT",
+  "Claude/Anthropic",
   "RAG/Knowledge",
   "LLM Apps",
   "Model Serving",

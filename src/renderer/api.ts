@@ -2,6 +2,7 @@ import { APP_NAME } from "../shared/branding";
 import { classifyRepository } from "../shared/classifier";
 import { scoreRepository } from "../shared/ranking";
 import {
+  AI_SUBCATEGORIES,
   AppApi,
   AppApiV2,
   CategoryCounts,
@@ -70,6 +71,57 @@ const fallbackRepos: Repository[] = [
     pushedAt: now,
     readmeExcerpt: "Get up and running with large language models locally.",
     lastSeenAt: now
+  },
+  {
+    id: "github:anthropics/claude-code-skills",
+    fullName: "anthropics/claude-code-skills",
+    owner: "anthropics",
+    name: "claude-code-skills",
+    description: "Claude Code skills, slash commands, and agent workflow plugins.",
+    url: "https://github.com/anthropics/claude-code-skills",
+    stars: 38000,
+    forks: 4100,
+    openIssues: 120,
+    language: "TypeScript",
+    license: "MIT",
+    topics: ["claude-code", "skills", "plugins", "slash-commands"],
+    pushedAt: now,
+    readmeExcerpt: "Reusable Claude Code skills and custom slash commands for coding agents.",
+    lastSeenAt: now
+  },
+  {
+    id: "github:openai/codex-cli",
+    fullName: "openai/codex-cli",
+    owner: "openai",
+    name: "codex-cli",
+    description: "Codex CLI coding agent for terminal software engineering loops.",
+    url: "https://github.com/openai/codex-cli",
+    stars: 52000,
+    forks: 5600,
+    openIssues: 220,
+    language: "Rust",
+    license: "Apache-2.0",
+    topics: ["codex", "coding-agent", "cli", "openai"],
+    pushedAt: now,
+    readmeExcerpt: "OpenAI Codex command line assistant for code editing, tool use, and agentic workflows.",
+    lastSeenAt: now
+  },
+  {
+    id: "github:awesome/prompt-workflows",
+    fullName: "awesome/prompt-workflows",
+    owner: "awesome",
+    name: "prompt-workflows",
+    description: "System prompt templates, ChatGPT prompts, and prompt workflow recipes.",
+    url: "https://github.com/awesome/prompt-workflows",
+    stars: 24000,
+    forks: 1800,
+    openIssues: 40,
+    language: "Markdown",
+    license: "CC-BY-4.0",
+    topics: ["prompts", "prompt-engineering", "chatgpt", "workflows"],
+    pushedAt: now,
+    readmeExcerpt: "提示词库 with system prompt templates and prompt workflow manager patterns.",
+    lastSeenAt: now
   }
 ];
 
@@ -83,7 +135,7 @@ const fallbackRecords: RepoRecord[] = fallbackRepos.map((repo, index) => {
     observedAt: now,
     rank: index + 1,
     stars: repo.stars,
-    growth: [2900, 1800, 2200][index],
+    growth: [2900, 1800, 2200, 1250, 1620, 760][index] ?? 400,
     url: repo.url
   };
   return {
@@ -103,6 +155,18 @@ const fallbackRecords: RepoRecord[] = fallbackRepos.map((repo, index) => {
     ranking: scoreRepository(repo, classification, [observation], "daily")
   } satisfies RepoRecord;
 });
+
+const fallbackAiFocus = AI_SUBCATEGORIES
+  .map((subcategory) => {
+    const items = fallbackRecords.filter((record) => record.classification.secondaryCategory === subcategory);
+    return {
+      subcategory,
+      count: items.length,
+      topRepo: items[0],
+      topTags: Array.from(new Set(items.flatMap((record) => record.classification.tags))).slice(0, 4)
+    };
+  })
+  .filter((item) => item.count > 0);
 
 const fallbackSettings: Settings = {
   githubToken: "",
@@ -151,14 +215,7 @@ export const api: AppApi = window.githubIntel ?? {
         { label: "mcp", count: 1, sampleRepo: fallbackRecords[0]?.repo.fullName },
         { label: "llm", count: 2, sampleRepo: fallbackRecords[1]?.repo.fullName }
       ],
-      aiFocus: [
-        {
-          subcategory: "MCP/Tools",
-          count: 1,
-          topRepo: fallbackRecords[0],
-          topTags: ["mcp", "tools", "agents"]
-        }
-      ],
+      aiFocus: fallbackAiFocus,
       refreshDelta: {
         status: "pending",
         discovered: 0,
@@ -170,9 +227,15 @@ export const api: AppApi = window.githubIntel ?? {
     };
   },
   async listRepos(filters) {
+    const searchTerms = (filters.search ?? "").toLowerCase().split(/[\s,|]+/).filter((term) => term.length >= 2);
     return fallbackRecords
-      .filter((record) => !filters.search || record.repo.fullName.toLowerCase().includes(filters.search.toLowerCase()))
-      .filter((record) => !filters.primaryCategory || filters.primaryCategory === "All" || record.classification.primaryCategory === filters.primaryCategory);
+      .filter((record) => {
+        if (!searchTerms.length) return true;
+        const haystack = `${record.repo.fullName} ${record.repo.description} ${record.repo.topics.join(" ")} ${record.classification.secondaryCategory} ${record.classification.tags.join(" ")}`.toLowerCase();
+        return searchTerms.some((term) => haystack.includes(term));
+      })
+      .filter((record) => !filters.primaryCategory || filters.primaryCategory === "All" || record.classification.primaryCategory === filters.primaryCategory)
+      .filter((record) => !filters.secondaryCategory || filters.secondaryCategory === "All" || record.classification.secondaryCategory === filters.secondaryCategory);
   },
   async getRepo(repoId) {
     return fallbackRecords.find((record) => record.repo.id === repoId);

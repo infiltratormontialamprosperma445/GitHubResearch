@@ -43,6 +43,7 @@ import SkeletonRow from "./components/SkeletonRow";
 import {
   AI_SUBCATEGORIES,
   PRIMARY_CATEGORIES,
+  type AiSubcategory,
   type PrimaryCategory,
   type RefreshProgress,
   type RepoRecord,
@@ -78,6 +79,27 @@ const MODULES: Array<{ id: ModuleId; labelKey: string; icon: typeof LayoutDashbo
 ];
 
 const PAGE_SIZE = 50;
+const LOGO_SRC = "./icon.png";
+
+type AiSidebarFilter = {
+  id: string;
+  labelKey: string;
+  hintKey: string;
+  secondaryCategory?: AiSubcategory;
+  search?: string;
+  badge: string;
+};
+
+const AI_SIDEBAR_FILTERS: AiSidebarFilter[] = [
+  { id: "skills", labelKey: "aiFilter.skills", hintKey: "aiFilter.skillsHint", secondaryCategory: "Skills/Plugins", badge: "SK" },
+  { id: "prompts", labelKey: "aiFilter.prompts", hintKey: "aiFilter.promptsHint", secondaryCategory: "Prompts/Workflows", badge: "PR" },
+  { id: "claude-code", labelKey: "aiFilter.claudeCode", hintKey: "aiFilter.claudeCodeHint", secondaryCategory: "Claude Code", search: "claude code claude-code", badge: "CC" },
+  { id: "codex", labelKey: "aiFilter.codex", hintKey: "aiFilter.codexHint", secondaryCategory: "Codex/CLI", search: "codex openai-codex", badge: "CX" },
+  { id: "chatgpt", labelKey: "aiFilter.chatgpt", hintKey: "aiFilter.chatgptHint", secondaryCategory: "OpenAI/GPT", search: "openai chatgpt gpt cpt", badge: "GPT" },
+  { id: "mcp", labelKey: "aiFilter.mcp", hintKey: "aiFilter.mcpHint", secondaryCategory: "MCP/Tools", search: "mcp model-context-protocol", badge: "MCP" },
+  { id: "agents", labelKey: "aiFilter.agents", hintKey: "aiFilter.agentsHint", secondaryCategory: "Agent Frameworks", search: "agent agents multi-agent", badge: "AG" },
+  { id: "rag", labelKey: "aiFilter.rag", hintKey: "aiFilter.ragHint", secondaryCategory: "RAG/Knowledge", search: "rag retrieval vector", badge: "RAG" }
+];
 
 // ── Theme management ──────────────────────────────────────────
 
@@ -95,12 +117,13 @@ function getInitialTheme(): Theme {
 // ── Main App Component ────────────────────────────────────────
 
 export default function App() {
-  const { t, locale, setLocale, categoryLabel } = useI18n();
+  const { t, locale, setLocale, categoryLabel, subcategoryLabel } = useI18n();
   const queryClient = useQueryClient();
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [activeModule, setActiveModule] = useState<ModuleId>("dashboard");
   const [window, setWindow] = useState<TrendWindow>("daily");
   const [category, setCategory] = useState<string>("All");
+  const [secondaryCategory, setSecondaryCategory] = useState<string>("All");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string>("");
   const [compareIds, setCompareIds] = useState<string[]>([]);
@@ -117,6 +140,13 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", theme);
     try { globalThis.localStorage?.setItem(THEME_KEY, theme); } catch { /* ignore */ }
   }, [theme]);
+
+  useEffect(() => {
+    const splash = document.getElementById("boot-splash");
+    document.documentElement.setAttribute("data-boot", "ready");
+    const timer = globalThis.setTimeout(() => splash?.remove(), 220);
+    return () => globalThis.clearTimeout(timer);
+  }, []);
 
   const toggleTheme = useCallback(() => {
     setTheme((prev) => prev === "dark" ? "light" : "dark");
@@ -136,12 +166,13 @@ export default function App() {
   });
 
   const reposQuery = useQuery({
-    queryKey: ["repos", window, category, search, page],
+    queryKey: ["repos", window, category, secondaryCategory, search, page],
     queryFn: () =>
       api.listRepos({
         window,
         search,
         primaryCategory: category,
+        secondaryCategory,
         limit: PAGE_SIZE * page
       }),
     placeholderData: keepPreviousData
@@ -251,14 +282,29 @@ export default function App() {
 
   const records = reposQuery.data ?? [];
   const categoryCounts = categoryCountsQuery.data ?? {};
+  const aiFocusCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of dashboardQuery.data?.aiFocus ?? []) counts.set(item.subcategory, item.count);
+    for (const record of records) {
+      const key = record.classification.secondaryCategory;
+      counts.set(key, Math.max(counts.get(key) ?? 0, records.filter((item) => item.classification.secondaryCategory === key).length));
+    }
+    return counts;
+  }, [dashboardQuery.data?.aiFocus, records]);
   const totalWindowRepos = useMemo(() => {
     return Object.values(categoryCounts).reduce((sum, count) => sum + count, 0);
   }, [categoryCounts]);
+  const activeFilterLabel = useMemo(() => {
+    if (secondaryCategory !== "All") return `${categoryLabel("AI")} / ${subcategoryLabel(secondaryCategory)}`;
+    if (category !== "All") return categoryLabel(category);
+    if (search) return search;
+    return "";
+  }, [category, categoryLabel, search, secondaryCategory, subcategoryLabel]);
   const displayedTotalRepos = useMemo(() => {
-    if (search) return records.length >= PAGE_SIZE * page ? records.length + 1 : records.length;
+    if (search || secondaryCategory !== "All") return records.length >= PAGE_SIZE * page ? records.length + 1 : records.length;
     if (category !== "All") return categoryCounts[category] ?? records.length;
     return totalWindowRepos || records.length;
-  }, [category, categoryCounts, page, records.length, search, totalWindowRepos]);
+  }, [category, categoryCounts, page, records.length, search, secondaryCategory, totalWindowRepos]);
 
   const selected = useMemo(
     () => records.find((record) => record.repo.id === selectedId) ?? records[0] ?? dashboardQuery.data?.hotRepos[0],
@@ -272,11 +318,37 @@ export default function App() {
   // Keep empty first-run windows user-controlled so startup never triggers network discovery automatically.
   const invalidate = () => void queryClient.invalidateQueries();
 
+  const clearFilters = useCallback(() => {
+    setCategory("All");
+    setSecondaryCategory("All");
+    setSearch("");
+    setPage(1);
+  }, []);
+
+  const applyPrimaryFilter = useCallback((nextCategory: string) => {
+    setCategory(nextCategory);
+    setSecondaryCategory("All");
+    setSearch("");
+    setPage(1);
+    setActiveModule("explorer");
+  }, []);
+
+  const applyAiSubcategory = useCallback((nextSubcategory: string, nextSearch = "") => {
+    setCategory("AI");
+    setSecondaryCategory(nextSubcategory);
+    setSearch(nextSearch);
+    setPage(1);
+    setActiveModule("explorer");
+  }, []);
+
+  const applyAiFilter = useCallback((filter?: AiSidebarFilter) => {
+    applyAiSubcategory(filter?.secondaryCategory ?? "All", filter?.search ?? "");
+  }, [applyAiSubcategory]);
+
   const handleWindowChange = (nextWindow: TrendWindow) => {
     setWindow(nextWindow);
-    setCategory("All");
+    clearFilters();
     setSelectedId("");
-    setPage(1);
     setActiveModule((current) => current === "dashboard" ? "explorer" : current);
   };
 
@@ -352,24 +424,56 @@ export default function App() {
 
           <div className="sidebar-section">
             <div className="section-label">{t("sidebar.categories")}</div>
-            <button className={clsx("category-button", category === "All" && "active")} onClick={() => { setCategory("All"); setPage(1); }}>
+            <button className={clsx("category-button", category === "All" && secondaryCategory === "All" && !search && "active")} onClick={clearFilters}>
               <span>{t("common.all")}</span>
               <small>{totalWindowRepos}</small>
             </button>
             {PRIMARY_CATEGORIES.map((item) => (
               <button
                 key={item}
-                className={clsx("category-button", category === item && "active")}
-                onClick={() => {
-                  setCategory(item);
-                  setPage(1);
-                  setActiveModule("explorer");
-                }}
+                className={clsx("category-button", category === item && secondaryCategory === "All" && !search && "active")}
+                onClick={() => applyPrimaryFilter(item)}
               >
                 <span>{categoryLabel(item)}</span>
                 <small>{categoryCounts[item] ?? 0}</small>
               </button>
             ))}
+          </div>
+
+          <div className="sidebar-section ai-lanes">
+            <div className="section-label ai-lanes-label">
+              <Brain size={12} />
+              <span>{t("aiFilter.title")}</span>
+            </div>
+            <p className="sidebar-help">{t("aiFilter.meta")}</p>
+            <button
+              className={clsx("category-button ai-lane-all", category === "AI" && secondaryCategory === "All" && !search && "active")}
+              onClick={() => applyAiFilter()}
+            >
+              <span>{t("aiFilter.all")}</span>
+              <small>{categoryCounts.AI ?? 0}</small>
+            </button>
+            <div className="ai-lane-grid">
+              {AI_SIDEBAR_FILTERS.map((filter) => {
+                const count = filter.secondaryCategory ? aiFocusCounts.get(filter.secondaryCategory) ?? 0 : 0;
+                const active = category === "AI" && secondaryCategory === (filter.secondaryCategory ?? "All") && search === (filter.search ?? "");
+                return (
+                  <button
+                    key={filter.id}
+                    className={clsx("ai-lane-button", active && "active")}
+                    onClick={() => applyAiFilter(filter)}
+                    title={t(filter.hintKey)}
+                  >
+                    <span className="ai-lane-badge">{filter.badge}</span>
+                    <span className="ai-lane-copy">
+                      <strong>{t(filter.labelKey)}</strong>
+                      <em>{t(filter.hintKey)}</em>
+                    </span>
+                    <small>{count}</small>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="sidebar-footer">
@@ -424,6 +528,8 @@ export default function App() {
               onWindowChange={handleWindowChange}
               page={page}
               setPage={setPage}
+              activeFilterLabel={activeFilterLabel}
+              onClearFilters={clearFilters}
             />
           )}
           {activeModule === "categories" && (
@@ -431,11 +537,8 @@ export default function App() {
               records={records}
               onSelect={(record) => setSelectedId(record.repo.id)}
               onOpenExternal={(url) => void api.openExternal(url)}
-              onOpenExplorer={(nextCategory) => {
-                setCategory(nextCategory);
-                setPage(1);
-                setActiveModule("explorer");
-              }}
+              onOpenExplorer={(nextCategory) => applyPrimaryFilter(nextCategory)}
+              onOpenAiSubcategory={(nextSubcategory) => applyAiSubcategory(nextSubcategory)}
             />
           )}
           {activeModule === "collections" && (
@@ -508,6 +611,16 @@ export default function App() {
 
 // ── TitleBar Component ────────────────────────────────────────
 
+function BrandLogo() {
+  const [failed, setFailed] = useState(false);
+  return (
+    <span className="titlebar-logo-wrap" aria-hidden="true">
+      {!failed && <img className="titlebar-logo" src={LOGO_SRC} alt="" onError={() => setFailed(true)} />}
+      <span className={clsx("titlebar-logo-fallback", !failed && "under-image")}>GR</span>
+    </span>
+  );
+}
+
 function TitleBar({ theme, onToggleTheme, onOpenCommandPalette, onRefresh, isRefreshing }: {
   theme: Theme;
   onToggleTheme: () => void;
@@ -544,7 +657,7 @@ function TitleBar({ theme, onToggleTheme, onOpenCommandPalette, onRefresh, isRef
     <header className="titlebar" style={{ WebkitAppRegion: "drag" } as CSSProperties}>
       <div className="titlebar-left">
         <div className="titlebar-brand">
-          <img className="titlebar-logo" src="/icon.png" alt="" aria-hidden="true" />
+          <BrandLogo />
           <span className="titlebar-title">{APP_NAME}</span>
         </div>
         <span className="titlebar-subtitle">{t("app.subtitle")}</span>
@@ -830,7 +943,7 @@ function Dashboard({ records, summary, onSelect, onOpenExternal, onModule }: {
 
 // ── Trending Explorer ─────────────────────────────────────────
 
-function TrendingExplorer({ records, totalCount, loading, selectedId, compareIds, onSelect, onOpenExternal, onToggleCompare, window, onWindowChange, page, setPage }: {
+function TrendingExplorer({ records, totalCount, loading, selectedId, compareIds, onSelect, onOpenExternal, onToggleCompare, window, onWindowChange, page, setPage, activeFilterLabel, onClearFilters }: {
   records: RepoRecord[];
   totalCount: number;
   loading: boolean;
@@ -843,6 +956,8 @@ function TrendingExplorer({ records, totalCount, loading, selectedId, compareIds
   onWindowChange: (w: TrendWindow) => void;
   page: number;
   setPage: (page: number) => void;
+  activeFilterLabel?: string;
+  onClearFilters: () => void;
 }) {
   const { t, locale, categoryLabel, subcategoryLabel } = useI18n();
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
@@ -850,9 +965,16 @@ function TrendingExplorer({ records, totalCount, loading, selectedId, compareIds
 
   return (
     <section className="panel full">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14, gap: 12 }}>
         <div>
           <PanelHeader title={t("explorer.title")} meta={t("common.repositories", { count: totalCount })} />
+          {activeFilterLabel && (
+            <button className="active-filter-pill" type="button" onClick={onClearFilters} title={t("filter.clear")}>
+              <Tag size={12} />
+              <span>{t("filter.active")}: {activeFilterLabel}</span>
+              <X size={12} />
+            </button>
+          )}
         </div>
         <SegmentedWindow value={window} onChange={onWindowChange} />
       </div>
@@ -934,11 +1056,12 @@ function TrendingExplorer({ records, totalCount, loading, selectedId, compareIds
 
 // ── Category Intelligence ─────────────────────────────────────
 
-function CategoryIntelligence({ records, onSelect, onOpenExternal, onOpenExplorer }: {
+function CategoryIntelligence({ records, onSelect, onOpenExternal, onOpenExplorer, onOpenAiSubcategory }: {
   records: RepoRecord[];
   onSelect: (record: RepoRecord) => void;
   onOpenExternal: (url: string) => void;
   onOpenExplorer: (category: string) => void;
+  onOpenAiSubcategory: (subcategory: string) => void;
 }) {
   const { t, categoryLabel, subcategoryLabel } = useI18n();
   const groups = PRIMARY_CATEGORIES.map((cat) => {
@@ -969,7 +1092,7 @@ function CategoryIntelligence({ records, onSelect, onOpenExternal, onOpenExplore
         <PanelHeader title={t("categories.aiSubcategories")} meta={t("categories.aiMeta")} />
         <div className="subcategory-grid">
           {aiBreakdown.map((item) => (
-            <button key={item.subcategory} className="subcategory-card" onClick={() => item.top && onSelect(item.top)}>
+            <button key={item.subcategory} className="subcategory-card" onClick={() => onOpenAiSubcategory(item.subcategory)}>
               <span>{subcategoryLabel(item.subcategory)}</span>
               <strong>{item.count}</strong>
               <small>{item.top?.repo.fullName ?? item.tags.join(", ")}</small>

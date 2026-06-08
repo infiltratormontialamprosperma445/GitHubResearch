@@ -1,15 +1,151 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-boot="loading">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#faf9f6" />
-    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#0d0d0d" />
+    <meta name="color-scheme" content="dark light" />
     <meta name="description" content="GitHubResearch - local-first research intelligence for discovering, searching, and classifying GitHub repositories" />
-    <link rel="icon" type="image/png" href="/icon.png" />
+    <link rel="icon" type="image/png" href="./icon.png" />
     <title>GitHubResearch</title>
+    <style>
+      :root {
+        background: #0d0d0d;
+        color: #ececec;
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      }
+
+      :root[data-theme="light"] {
+        background: #f5f3ed;
+        color: #1a1a19;
+      }
+
+      html,
+      body,
+      #root {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      body {
+        background:
+          radial-gradient(circle at 15% 15%, rgba(217, 119, 87, 0.18), transparent 32%),
+          linear-gradient(135deg, #0d0d0d 0%, #131615 48%, #0d0d0d 100%);
+      }
+
+      :root[data-theme="light"] body {
+        background:
+          radial-gradient(circle at 12% 12%, rgba(194, 85, 58, 0.14), transparent 34%),
+          linear-gradient(135deg, #f5f3ed 0%, #fbfaf6 52%, #efe8dd 100%);
+      }
+
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: grid;
+        place-items: center;
+        background: inherit;
+        transition: opacity 180ms ease, visibility 180ms ease;
+      }
+
+      :root[data-boot="ready"] #boot-splash {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      .boot-card {
+        width: min(420px, calc(100vw - 48px));
+        padding: 28px;
+        border: 1px solid rgba(217, 119, 87, 0.24);
+        border-radius: 22px;
+        background: rgba(22, 22, 22, 0.78);
+        box-shadow: 0 28px 80px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        backdrop-filter: blur(18px);
+      }
+
+      :root[data-theme="light"] .boot-card {
+        background: rgba(250, 249, 246, 0.84);
+        box-shadow: 0 28px 70px rgba(90, 64, 46, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.74);
+      }
+
+      .boot-brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .boot-logo {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.12) inset, 0 14px 30px rgba(217, 119, 87, 0.26);
+      }
+
+      .boot-copy strong {
+        display: block;
+        font-size: 18px;
+        letter-spacing: -0.03em;
+      }
+
+      .boot-copy span {
+        display: block;
+        margin-top: 2px;
+        color: #a0a0a0;
+        font-size: 12px;
+      }
+
+      :root[data-theme="light"] .boot-copy span {
+        color: #6b6b64;
+      }
+
+      .boot-bar {
+        position: relative;
+        height: 4px;
+        margin-top: 24px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(217, 119, 87, 0.14);
+      }
+
+      .boot-bar::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        width: 42%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, transparent, #d97757, #f0a06e);
+        animation: boot-scan 980ms cubic-bezier(.22,.8,.36,1) infinite;
+      }
+
+      @keyframes boot-scan {
+        from { transform: translateX(-110%); }
+        to { transform: translateX(245%); }
+      }
+    </style>
+    <script>
+      try {
+        var theme = localStorage.getItem("githubresearch-theme") || "dark";
+        if (theme === "dark" || theme === "light") document.documentElement.setAttribute("data-theme", theme);
+      } catch (_) {}
+    </script>
   </head>
   <body>
+    <div id="boot-splash" aria-hidden="true">
+      <div class="boot-card">
+        <div class="boot-brand">
+          <img class="boot-logo" src="./icon.png" alt="" />
+          <div class="boot-copy">
+            <strong>GitHubResearch</strong>
+            <span>Loading local research intelligence…</span>
+          </div>
+        </div>
+        <div class="boot-bar"></div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/renderer/main.tsx"></script>
   </body>
