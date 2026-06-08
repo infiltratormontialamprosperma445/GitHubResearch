@@ -44,6 +44,7 @@ function New-GitHubResearchFallbackIcon {
   $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
   $graphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
   $graphics.Clear([System.Drawing.Color]::Transparent)
+  $graphics.ScaleTransform($Size / 256, $Size / 256)
 
   $background = [System.Drawing.ColorTranslator]::FromHtml("#111313")
   $panel = [System.Drawing.ColorTranslator]::FromHtml("#171918")
@@ -164,27 +165,47 @@ function Write-IcoFromBitmap {
   }
 }
 
-$size = 256
+$assetSize = 1024
+$icoSize = 256
 $pngPath = Join-Path $buildDir "icon.png"
 $sourcePath = Join-Path $buildDir "icon-source.png"
 $publicPath = Join-Path $publicDir "icon.png"
 $icoPath = Join-Path $buildDir "icon.ico"
 
 $bitmap = $null
+$icoBitmap = $null
 try {
+  $shouldRegenerateSource = $true
   if (Test-Path $sourcePath) {
-    $bitmap = New-ResizedBitmapFromSource $sourcePath $size
-  } else {
-    $bitmap = New-GitHubResearchFallbackIcon $size
-    $bitmap.Save($sourcePath, [System.Drawing.Imaging.ImageFormat]::Png)
+    $sourceProbe = [System.Drawing.Image]::FromFile($sourcePath)
+    try {
+      $shouldRegenerateSource = $sourceProbe.Width -lt 512 -or $sourceProbe.Height -lt 512
+    }
+    finally {
+      $sourceProbe.Dispose()
+    }
   }
 
+  if ($shouldRegenerateSource) {
+    $sourceBitmap = New-GitHubResearchFallbackIcon $assetSize
+    try {
+      $sourceBitmap.Save($sourcePath, [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally {
+      $sourceBitmap.Dispose()
+    }
+  }
+
+  $bitmap = New-ResizedBitmapFromSource $sourcePath $assetSize
   $bitmap.Save($pngPath, [System.Drawing.Imaging.ImageFormat]::Png)
   $bitmap.Save($publicPath, [System.Drawing.Imaging.ImageFormat]::Png)
-  Write-IcoFromBitmap $bitmap $icoPath
+
+  $icoBitmap = New-ResizedBitmapFromSource $sourcePath $icoSize
+  Write-IcoFromBitmap $icoBitmap $icoPath
 }
 finally {
   if ($bitmap) { $bitmap.Dispose() }
+  if ($icoBitmap) { $icoBitmap.Dispose() }
 }
 
 Write-Host "Created $pngPath, $icoPath, and $publicPath from $sourcePath"
