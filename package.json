@@ -59,6 +59,7 @@
       "buildResources": "build",
       "output": "release"
     },
+    "afterPack": "scripts/after-pack-icon.cjs",
     "artifactName": "GitHubResearch-${version}-${os}-${arch}.${ext}",
     "files": [
       "dist/**",
@@ -114,6 +115,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "GitHubResearch",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
       "deleteAppDataOnUninstall": false
     },
     "portable": {

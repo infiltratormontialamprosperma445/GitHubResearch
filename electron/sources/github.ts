@@ -189,8 +189,8 @@ export class GitHubSearchAdapter implements SourceAdapter {
 
 export class SupplementalTrendAdapter implements SourceAdapter {
   id = "third-party";
-  label = "Third-party Trend Sources";
-  weight = 0.45;
+  label = "Open-source Directory Signals";
+  weight = 0.55;
   supportsBackfill = false;
   maxConcurrency = 1;
 
@@ -222,9 +222,9 @@ export class SupplementalTrendAdapter implements SourceAdapter {
       configured: true,
       enabled: true,
       status: "healthy",
-      message: "Uses supplemental GitHub topic sweeps as a stable local substitute for optional third-party trend feeds.",
+      message: "Uses GitHub topics, MCP catalogs, prompt libraries, browser automation, domestic LLM stacks, and curated open-source directories as cross-check signals.",
       weight: this.weight,
-      coverage: 0.28
+      coverage: 0.42
     };
   }
 
@@ -233,7 +233,7 @@ export class SupplementalTrendAdapter implements SourceAdapter {
   }
 
   async validateSettings(): Promise<{ ok: boolean; message: string }> {
-    return { ok: true, message: "Supplemental topic sweep is available." };
+    return { ok: true, message: "Open-source directory and topic sweep is available." };
   }
 }
 
@@ -384,7 +384,13 @@ function searchQueries(window: TrendWindow, authenticated: boolean): string[] {
     `topic:coding-agent stars:>20 ${recent}`,
     `topic:prompt-engineering stars:>50 ${recent}`,
     `topic:ai-tools stars:>100 ${recent}`,
-    `topic:developer-tools stars:>500 ${recent}`
+    `topic:developer-tools stars:>500 ${recent}`,
+    `topic:browser-automation stars:>20 ${recent}`,
+    `topic:computer-use stars:>10 ${recent}`,
+    `topic:function-calling stars:>10 ${recent}`,
+    `topic:tool-calling stars:>10 ${recent}`,
+    `topic:claude-code stars:>5 ${recent}`,
+    `topic:codex stars:>5 ${recent}`
   ];
   const aiEcosystem = [
     `chatgpt stars:>50 ${recent}`,
@@ -412,15 +418,46 @@ function searchQueries(window: TrendWindow, authenticated: boolean): string[] {
     `"coding agent" cli stars:>10 ${recent}`,
     `"model context protocol" stars:>10 ${recent}`,
     `"mcp server" stars:>10 ${recent}`,
+    `"mcp servers" stars:>10 ${recent}`,
     `"mcp client" stars:>10 ${recent}`,
+    `"mcp registry" stars:>5 ${recent}`,
+    `"mcp marketplace" stars:>5 ${recent}`,
+    `"playwright mcp" stars:>5 ${recent}`,
+    `"browser mcp" stars:>5 ${recent}`,
     `"tool calling" stars:>10 ${recent}`,
     `"function calling" agent stars:>10 ${recent}`,
+    `"structured outputs" openai stars:>5 ${recent}`,
     `"slash commands" ai stars:>10 ${recent}`,
+    `"claude skills" stars:>5 ${recent}`,
+    `"claude code" skills stars:>5 ${recent}`,
     `"prompt library" stars:>10 ${recent}`,
     `"prompt manager" stars:>10 ${recent}`,
     `"prompt workflow" stars:>10 ${recent}`,
     `"system prompt" stars:>10 ${recent}`,
-    `"prompt templates" stars:>10 ${recent}`
+    `"prompt templates" stars:>10 ${recent}`,
+    `"browser automation" ai stars:>10 ${recent}`,
+    `"browser-use" stars:>5 ${recent}`,
+    `"computer use" ai stars:>5 ${recent}`,
+    `"ai browser" stars:>5 ${recent}`,
+    `"web agent" browser stars:>5 ${recent}`
+  ];
+  const domesticAndEcosystem = [
+    `dify stars:>100 ${recent}`,
+    `fastgpt stars:>50 ${recent}`,
+    `qwen agent stars:>10 ${recent}`,
+    `qwen mcp stars:>5 ${recent}`,
+    `deepseek agent stars:>10 ${recent}`,
+    `chatglm agent stars:>10 ${recent}`,
+    `modelscope llm stars:>10 ${recent}`,
+    `xinference stars:>20 ${recent}`,
+    `one-api openai compatible stars:>10 ${recent}`,
+    `langfuse llmops stars:>20 ${recent}`,
+    `litellm gateway stars:>20 ${recent}`,
+    `openrouter api stars:>5 ${recent}`,
+    `flowise agent stars:>20 ${recent}`,
+    `n8n ai agent stars:>50 ${recent}`,
+    `browserbase stagehand stars:>5 ${recent}`,
+    `playwright mcp stars:>5 ${recent}`
   ];
   const broader = [
     `topic:rag stars:>100 ${recent}`,
@@ -444,10 +481,10 @@ function searchQueries(window: TrendWindow, authenticated: boolean): string[] {
     `topic:kubernetes stars:>1000 ${recent}`,
     `topic:react stars:>1000 ${recent}`
   ];
-  const all = uniqueQueries([...core, ...aiEcosystem, ...broader]);
+  const all = uniqueQueries([...core, ...aiEcosystem, ...domesticAndEcosystem, ...broader]);
   const limit = authenticated
-    ? (window === "daily" ? 24 : window === "weekly" ? 36 : all.length)
-    : (window === "daily" ? 10 : window === "weekly" ? 14 : 18);
+    ? (window === "daily" ? 42 : window === "weekly" ? 64 : all.length)
+    : (window === "daily" ? 16 : window === "weekly" ? 24 : 32);
   return all.slice(0, limit);
 }
 
@@ -685,6 +722,12 @@ function supplementalCatalog(window: TrendWindow): Repository[] {
     ["modelcontextprotocol/servers", "Reference MCP servers for connecting AI assistants to tools and data.", 62000, "TypeScript", ["mcp", "tools", "agents"]],
     ["modelcontextprotocol/typescript-sdk", "TypeScript SDK for Model Context Protocol clients and servers.", 15000, "TypeScript", ["mcp", "sdk", "tools"]],
     ["modelcontextprotocol/python-sdk", "Python SDK for building Model Context Protocol clients and servers.", 9000, "Python", ["mcp", "python", "tools"]],
+    ["punkpeye/awesome-mcp-servers", "Curated directory of Model Context Protocol servers across files, browsers, databases, and SaaS tools.", 52000, "Markdown", ["mcp", "awesome", "mcp-server", "tools"]],
+    ["appcypher/awesome-mcp-servers", "Awesome list of MCP servers, clients, registries, and tool integrations.", 28000, "Markdown", ["mcp", "mcp-server", "mcp-client", "awesome"]],
+    ["github/github-mcp-server", "GitHub MCP server for repository, issue, pull request, and code context tools.", 18000, "Go", ["mcp", "github", "tools", "mcp-server"]],
+    ["microsoft/playwright-mcp", "Playwright MCP server that gives AI agents browser automation capabilities.", 12000, "TypeScript", ["mcp", "playwright", "browser-automation", "mcp-server"]],
+    ["browserbase/mcp-server-browserbase", "Browserbase MCP server for cloud browser sessions and web automation agents.", 7000, "TypeScript", ["mcp", "browserbase", "browser-automation", "tools"]],
+    ["upstash/context7", "MCP server that gives agents up-to-date library documentation and code examples.", 36000, "TypeScript", ["mcp", "documentation", "developer-tools", "agents"]],
     ["aider-ai/aider", "AI pair programming in the terminal with support for multiple LLM providers.", 35000, "Python", ["coding-agent", "cli", "llm", "aider"]],
     ["All-Hands-AI/OpenHands", "Open platform for software engineering agents that can modify code and run commands.", 55000, "Python", ["coding-agent", "software-engineering-agent", "llm"]],
     ["cline/cline", "Autonomous coding agent inside the IDE.", 52000, "TypeScript", ["coding-agent", "llm", "developer-tools"]],
@@ -692,7 +735,15 @@ function supplementalCatalog(window: TrendWindow): Repository[] {
     ["continuedev/continue", "Open-source AI code assistant and custom coding agent platform.", 28000, "TypeScript", ["coding-agent", "developer-tools", "llm"]],
     ["sst/opencode", "Terminal-native AI coding agent and CLI workflow.", 18000, "TypeScript", ["coding-agent", "cli", "terminal-agent"]],
     ["plandex-ai/plandex", "Terminal-based AI coding engine for large changes and planning workflows.", 14000, "Go", ["coding-agent", "cli", "planning-agent"]],
+    ["musistudio/claude-code-router", "Route Claude Code requests across model providers and OpenAI-compatible endpoints.", 14000, "TypeScript", ["claude-code", "router", "openai-compatible", "llm-gateway"]],
+    ["SuperClaude-Org/SuperClaude_Framework", "Claude Code command framework with personas, slash commands, and workflow skills.", 17000, "Python", ["claude-code", "skills", "slash-commands", "prompts"]],
+    ["hesreallyhim/awesome-claude-code", "Curated Claude Code resources, commands, hooks, MCP integrations, and skills.", 9000, "Markdown", ["claude-code", "awesome", "skills", "mcp"]],
     ["browser-use/browser-use", "Make websites accessible for AI agents.", 71000, "Python", ["agents", "browser", "automation"]],
+    ["browserbase/stagehand", "AI browser automation framework for reliable web workflows.", 14000, "TypeScript", ["browser-automation", "agents", "playwright"]],
+    ["microsoft/playwright", "Reliable end-to-end browser automation and testing framework.", 76000, "TypeScript", ["browser-automation", "playwright", "testing"]],
+    ["puppeteer/puppeteer", "Browser automation and control for Chrome/Chromium.", 91000, "TypeScript", ["browser-automation", "chrome", "testing"]],
+    ["OpenInterpreter/open-interpreter", "Natural language interface for computers with code execution and local automation.", 60000, "Python", ["computer-use", "automation", "agents", "local-ai"]],
+    ["e2b-dev/E2B", "Secure sandbox runtime for AI agents and code execution.", 9500, "Python", ["computer-use", "sandbox", "agents", "tools"]],
     ["langchain-ai/langgraph", "Build stateful multi-agent and tool-calling applications with language models.", 18000, "Python", ["agent-framework", "multi-agent", "llm"]],
     ["crewAIInc/crewAI", "Framework for orchestrating role-playing autonomous AI agents.", 32000, "Python", ["agent-framework", "multi-agent", "llm"]],
     ["microsoft/autogen", "Programming framework for agentic AI and multi-agent applications.", 45000, "Python", ["agent-framework", "multi-agent", "llm"]],
@@ -701,10 +752,25 @@ function supplementalCatalog(window: TrendWindow): Repository[] {
     ["promptfoo/promptfoo", "Test, evaluate, and secure LLM prompts and applications.", 8000, "TypeScript", ["prompt-evaluation", "eval", "llm"]],
     ["f/awesome-chatgpt-prompts", "Curated prompt library for ChatGPT and LLM workflows.", 120000, "HTML", ["chatgpt", "prompt-library", "prompts"]],
     ["microsoft/promptflow", "Build, evaluate, and deploy prompt workflows and LLM apps.", 10000, "Python", ["prompt-workflow", "llmops", "evaluation"]],
+    ["dair-ai/Prompt-Engineering-Guide", "Guide and learning map for prompt engineering and LLM workflows.", 57000, "MDX", ["prompt-engineering", "prompts", "learning"]],
+    ["langfuse/langfuse", "Open-source LLM engineering platform for tracing, prompt management, evals, and metrics.", 13000, "TypeScript", ["llmops", "prompt-management", "evaluation", "observability"]],
     ["BerriAI/litellm", "LLM gateway and model router for OpenAI-compatible APIs.", 28000, "Python", ["llm", "gateway", "openai-compatible"]],
+    ["Portkey-AI/gateway", "AI gateway for routing, observability, caching, and guardrails across model providers.", 9000, "TypeScript", ["llm-gateway", "model-router", "openai-compatible"]],
+    ["songquanpeng/one-api", "OpenAI-compatible API management and model forwarding gateway.", 24000, "Go", ["openai-compatible", "llm-gateway", "api-proxy"]],
+    ["danny-avila/LibreChat", "Multi-provider AI chat platform with tools, agents, and OpenAI-compatible integrations.", 29000, "TypeScript", ["chatgpt", "llm-app", "agents", "openai-compatible"]],
     ["vllm-project/vllm", "High-throughput and memory-efficient inference and serving engine for LLMs.", 36000, "Python", ["llm", "model-serving", "inference"]],
     ["ollama/ollama", "Run large language models locally from a simple CLI.", 145000, "Go", ["llm", "cli", "local-ai", "model-serving"]],
     ["run-llama/llama_index", "Data framework for LLM applications and retrieval augmented generation.", 39000, "Python", ["rag", "llm", "retrieval"]],
+    ["chroma-core/chroma", "Open-source embedding database for AI applications.", 21000, "Python", ["rag", "vector-database", "embeddings"]],
+    ["milvus-io/milvus", "Cloud-native vector database for embedding and RAG workloads.", 34000, "Go", ["rag", "vector-database", "retrieval"]],
+    ["langgenius/dify", "Open-source LLM app development platform with agents, workflows, RAG, and model providers.", 115000, "TypeScript", ["llm-app", "agents", "workflow", "rag"]],
+    ["labring/FastGPT", "Knowledge-base Q&A and agent workflow platform for LLM applications.", 25000, "TypeScript", ["rag", "agents", "llm-app", "workflow"]],
+    ["QwenLM/Qwen-Agent", "Agent framework and browser/function calling examples for Qwen models.", 15000, "Python", ["qwen", "agents", "function-calling", "tool-calling"]],
+    ["QwenLM/Qwen", "Qwen large language model series and local/open model resources.", 19000, "Python", ["qwen", "local-models", "llm"]],
+    ["THUDM/ChatGLM3", "ChatGLM model and agent/tool calling examples.", 18000, "Python", ["chatglm", "llm", "tool-calling"]],
+    ["InternLM/InternLM", "Open-source large language models and agent ecosystem from Shanghai AI Lab.", 9000, "Python", ["internlm", "local-models", "llm"]],
+    ["modelscope/modelscope", "ModelScope open-source model hub SDK and AI application tooling.", 9000, "Python", ["modelscope", "model-hub", "local-models"]],
+    ["xorbitsai/inference", "Xinference model serving for LLMs, embedding models, and rerankers.", 10000, "Python", ["model-serving", "local-models", "inference"]],
     ["shadcn-ui/ui", "Reusable UI components for modern React applications.", 92000, "TypeScript", ["react", "ui", "components"]],
     ["fastapi/fastapi", "FastAPI framework for production APIs.", 84000, "Python", ["api", "backend", "framework"]],
     ["duckdb/duckdb", "Analytical in-process SQL database management system.", 31000, "C++", ["database", "analytics", "sql"]],
@@ -747,9 +813,11 @@ function inferTopics(value: string): string[] {
   const candidates = [
     "claude-code", "claude", "anthropic", "chatgpt", "openai", "codex",
     "aider", "cursor", "windsurf", "cline", "roo-code", "openhands",
-    "coding-agent", "terminal-agent", "agent", "agents", "mcp", "model-context-protocol",
-    "skills", "plugins", "prompt-library", "prompt-workflow", "prompt", "llm",
-    "rag", "model-serving", "inference", "ollama", "vllm", "react", "cli",
+    "coding-agent", "terminal-agent", "agent", "agents", "mcp", "mcp-server", "mcp-client", "model-context-protocol",
+    "tool-calling", "function-calling", "computer-use", "browser-automation", "browser-agent", "ai-browser",
+    "skills", "plugins", "slash-commands", "prompt-library", "prompt-workflow", "prompt", "llm",
+    "rag", "vector-database", "llm-gateway", "model-router", "local-models", "model-serving", "inference", "ollama", "vllm",
+    "qwen", "deepseek", "chatglm", "modelscope", "dify", "fastgpt", "react", "cli",
     "security", "kubernetes", "database"
   ];
   const topics = candidates.filter((topic) => text.includes(topic.replace(/-/g, " ")) || text.includes(topic));

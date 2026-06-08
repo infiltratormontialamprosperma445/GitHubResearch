@@ -181,7 +181,7 @@ const fallbackSettings: Settings = {
   backgroundRefresh: true,
   timezone: "Asia/Shanghai",
   cacheTtlHours: 6,
-  maxReposPerWindow: 200,
+  maxReposPerWindow: 320,
   enableNotifications: true,
   backupPath: ""
 };
@@ -191,7 +191,7 @@ export const api: AppApi = window.githubIntel ?? {
     return {
       updatedAt: now,
       totalRepos: fallbackRecords.length,
-      totalSources: 5,
+      totalSources: 6,
       health: await this.getSources(),
       hotRepos: fallbackRecords,
       categoryLeaders: [
@@ -265,8 +265,9 @@ export const api: AppApi = window.githubIntel ?? {
     return [
       { id: "github-trending", label: "GitHub Trending", configured: true, enabled: true, status: "healthy", message: "Ready", weight: 1, coverage: 0.8 },
       { id: "github-search", label: "GitHub Search API", configured: false, enabled: true, status: "degraded", message: "Add token for higher limits", weight: 0.9, coverage: 0.42 },
-      { id: "telegram-trends", label: "Telegram AI Channels", configured: true, enabled: true, status: "healthy", message: "Monitors AI channels for GitHub signals", weight: 0.7, coverage: 0.35 },
-      { id: "twitter-trends", label: "X (Twitter) AI Signals", configured: true, enabled: true, status: "healthy", message: "AI discussions and supplemental feeds", weight: 0.65, coverage: 0.3 },
+      { id: "telegram-trends", label: "Telegram AI/Open-source Channels", configured: true, enabled: true, status: "healthy", message: "Monitors AI, MCP, Claude Code, and domestic LLM channels", weight: 0.72, coverage: 0.45 },
+      { id: "twitter-trends", label: "X/Twitter AI + Browser Signals", configured: true, enabled: true, status: "healthy", message: "MCP, skills, browser automation, and AI project discussions", weight: 0.68, coverage: 0.42 },
+      { id: "open-source-directories", label: "Open-source Directory Signals", configured: true, enabled: true, status: "healthy", message: "GitHub topics, MCP catalogs, prompt libraries, and browser automation directories", weight: 0.55, coverage: 0.42 },
       { id: "gh-archive", label: "GH Archive WatchEvents", configured: true, enabled: true, status: "healthy", message: "Recent WatchEvent sampling ready", weight: 0.85, coverage: 0.32 }
     ];
   },

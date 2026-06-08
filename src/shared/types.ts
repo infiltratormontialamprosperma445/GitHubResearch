@@ -23,8 +23,16 @@ export type AiSubcategory =
   | "Skills/Plugins"
   | "Prompts/Workflows"
   | "MCP/Tools"
+  | "MCP Servers"
+  | "MCP Clients"
+  | "Tool Calling"
+  | "Browser Automation"
+  | "Computer Use"
+  | "AI Browsers"
   | "OpenAI/GPT"
   | "Claude/Anthropic"
+  | "Local Models"
+  | "LLM Gateways"
   | "RAG/Knowledge"
   | "LLM Apps"
   | "Model Serving"
@@ -402,8 +410,16 @@ export const AI_SUBCATEGORIES: AiSubcategory[] = [
   "Skills/Plugins",
   "Prompts/Workflows",
   "MCP/Tools",
+  "MCP Servers",
+  "MCP Clients",
+  "Tool Calling",
+  "Browser Automation",
+  "Computer Use",
+  "AI Browsers",
   "OpenAI/GPT",
   "Claude/Anthropic",
+  "Local Models",
+  "LLM Gateways",
   "RAG/Knowledge",
   "LLM Apps",
   "Model Serving",

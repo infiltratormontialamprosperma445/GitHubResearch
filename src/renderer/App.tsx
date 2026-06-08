@@ -88,15 +88,23 @@ type AiSidebarFilter = {
   secondaryCategory?: AiSubcategory;
   search?: string;
   badge: string;
+  priority?: "hot" | "new" | "infra";
 };
 
 const AI_SIDEBAR_FILTERS: AiSidebarFilter[] = [
-  { id: "skills", labelKey: "aiFilter.skills", hintKey: "aiFilter.skillsHint", secondaryCategory: "Skills/Plugins", badge: "SK" },
-  { id: "prompts", labelKey: "aiFilter.prompts", hintKey: "aiFilter.promptsHint", secondaryCategory: "Prompts/Workflows", badge: "PR" },
-  { id: "claude-code", labelKey: "aiFilter.claudeCode", hintKey: "aiFilter.claudeCodeHint", secondaryCategory: "Claude Code", search: "claude code claude-code", badge: "CC" },
-  { id: "codex", labelKey: "aiFilter.codex", hintKey: "aiFilter.codexHint", secondaryCategory: "Codex/CLI", search: "codex openai-codex", badge: "CX" },
+  { id: "skills", labelKey: "aiFilter.skills", hintKey: "aiFilter.skillsHint", secondaryCategory: "Skills/Plugins", search: "skills plugins slash commands", badge: "SK", priority: "hot" },
+  { id: "prompts", labelKey: "aiFilter.prompts", hintKey: "aiFilter.promptsHint", secondaryCategory: "Prompts/Workflows", search: "prompt prompts system prompt", badge: "PR", priority: "hot" },
+  { id: "claude-code", labelKey: "aiFilter.claudeCode", hintKey: "aiFilter.claudeCodeHint", secondaryCategory: "Claude Code", search: "claude code claude-code", badge: "CC", priority: "hot" },
+  { id: "codex", labelKey: "aiFilter.codex", hintKey: "aiFilter.codexHint", secondaryCategory: "Codex/CLI", search: "codex openai-codex", badge: "CX", priority: "hot" },
+  { id: "mcp-servers", labelKey: "aiFilter.mcpServers", hintKey: "aiFilter.mcpServersHint", secondaryCategory: "MCP Servers", search: "mcp server model-context-protocol", badge: "M-S", priority: "hot" },
+  { id: "mcp-clients", labelKey: "aiFilter.mcpClients", hintKey: "aiFilter.mcpClientsHint", secondaryCategory: "MCP Clients", search: "mcp client host gateway inspector", badge: "M-C", priority: "new" },
+  { id: "tool-calling", labelKey: "aiFilter.toolCalling", hintKey: "aiFilter.toolCallingHint", secondaryCategory: "Tool Calling", search: "tool calling function calling tools", badge: "FN", priority: "infra" },
+  { id: "browser", labelKey: "aiFilter.browserAutomation", hintKey: "aiFilter.browserAutomationHint", secondaryCategory: "Browser Automation", search: "browser automation playwright puppeteer browser-use", badge: "WEB", priority: "hot" },
+  { id: "computer-use", labelKey: "aiFilter.computerUse", hintKey: "aiFilter.computerUseHint", secondaryCategory: "Computer Use", search: "computer use desktop automation ui automation", badge: "CU", priority: "new" },
   { id: "chatgpt", labelKey: "aiFilter.chatgpt", hintKey: "aiFilter.chatgptHint", secondaryCategory: "OpenAI/GPT", search: "openai chatgpt gpt cpt", badge: "GPT" },
-  { id: "mcp", labelKey: "aiFilter.mcp", hintKey: "aiFilter.mcpHint", secondaryCategory: "MCP/Tools", search: "mcp model-context-protocol", badge: "MCP" },
+  { id: "claude", labelKey: "aiFilter.claude", hintKey: "aiFilter.claudeHint", secondaryCategory: "Claude/Anthropic", search: "claude anthropic", badge: "CL" },
+  { id: "local-models", labelKey: "aiFilter.localModels", hintKey: "aiFilter.localModelsHint", secondaryCategory: "Local Models", search: "ollama qwen deepseek local llm", badge: "LM" },
+  { id: "gateways", labelKey: "aiFilter.gateways", hintKey: "aiFilter.gatewaysHint", secondaryCategory: "LLM Gateways", search: "llm gateway model router openai compatible", badge: "GW", priority: "infra" },
   { id: "agents", labelKey: "aiFilter.agents", hintKey: "aiFilter.agentsHint", secondaryCategory: "Agent Frameworks", search: "agent agents multi-agent", badge: "AG" },
   { id: "rag", labelKey: "aiFilter.rag", hintKey: "aiFilter.ragHint", secondaryCategory: "RAG/Knowledge", search: "rag retrieval vector", badge: "RAG" }
 ];
@@ -460,13 +468,13 @@ export default function App() {
                 return (
                   <button
                     key={filter.id}
-                    className={clsx("ai-lane-button", active && "active")}
+                    className={clsx("ai-lane-button", filter.priority && `priority-${filter.priority}`, active && "active")}
                     onClick={() => applyAiFilter(filter)}
                     title={t(filter.hintKey)}
                   >
                     <span className="ai-lane-badge">{filter.badge}</span>
                     <span className="ai-lane-copy">
-                      <strong>{t(filter.labelKey)}</strong>
+                      <strong>{t(filter.labelKey)}{filter.priority && <b className="ai-lane-priority">{t(`priority.${filter.priority}`)}</b>}</strong>
                       <em>{t(filter.hintKey)}</em>
                     </span>
                     <small>{count}</small>
@@ -794,6 +802,16 @@ function Dashboard({ records, summary, onSelect, onOpenExternal, onModule }: {
   const { t, locale, categoryLabel, subcategoryLabel } = useI18n();
   const top = records[0];
   const isEmpty = records.length === 0;
+  const focusCountBySubcategory = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of summary?.aiFocus ?? []) counts.set(item.subcategory, item.count);
+    return counts;
+  }, [summary?.aiFocus]);
+  const priorityLanes = AI_SIDEBAR_FILTERS
+    .filter((filter) => filter.priority)
+    .map((filter) => ({ ...filter, count: filter.secondaryCategory ? focusCountBySubcategory.get(filter.secondaryCategory) ?? 0 : 0 }))
+    .sort((a, b) => b.count - a.count || (a.priority === "hot" ? -1 : 1))
+    .slice(0, 6);
 
   if (isEmpty) {
     return (
@@ -857,6 +875,20 @@ function Dashboard({ records, summary, onSelect, onOpenExternal, onModule }: {
         <Metric label={t("dashboard.aiHits")} value={records.filter((item) => item.classification.primaryCategory === "AI").length} icon={Brain} />
         <Metric label={t("dashboard.anomalyWatch")} value={summary?.anomalies.length ?? 0} icon={AlertTriangle} />
       </div>
+
+      <section className="panel wide priority-panel">
+        <PanelHeader title={t("dashboard.priorityMap")} meta={t("dashboard.priorityMeta")} action={t("module.categories")} onAction={() => onModule("categories")} />
+        <div className="priority-lane-grid">
+          {priorityLanes.map((lane) => (
+            <button key={lane.id} className={clsx("priority-lane-card", lane.priority && `priority-${lane.priority}`)} onClick={() => onModule("categories")}>
+              <span className="ai-lane-badge">{lane.badge}</span>
+              <strong>{t(lane.labelKey)}</strong>
+              <small>{t(lane.hintKey)}</small>
+              <b>{lane.count}</b>
+            </button>
+          ))}
+        </div>
+      </section>
 
       {summary?.topInsights?.length ? (
         <section className="panel wide">

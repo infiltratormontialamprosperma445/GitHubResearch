@@ -66,6 +66,8 @@ process.on("unhandledRejection", (reason) => {
   console.error("[unhandledRejection]", reason instanceof Error ? reason.message : String(reason));
 });
 
+app.setName(APP_NAME);
+
 if (process.platform === "win32") {
   app.setAppUserModelId(APP_ID);
 }
@@ -126,6 +128,10 @@ function createWindow(): void {
       sandbox: false
     }
   });
+
+  if (icon && process.platform !== "darwin") {
+    mainWindow.setIcon(icon);
+  }
 
   mainWindow.on("maximize", () => sendMaximizedState());
   mainWindow.on("unmaximize", () => sendMaximizedState());

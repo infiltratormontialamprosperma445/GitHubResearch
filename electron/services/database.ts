@@ -32,7 +32,7 @@ import { scoreRepository } from "../../src/shared/ranking.js";
 
 type Row = Record<string, string | number | null>;
 
-const BASELINE_CATALOG_VERSION = "2026-06-08-githubresearch-v1";
+const BASELINE_CATALOG_VERSION = "2026-06-08-ai-coverage-v2";
 const FTS_INDEX_VERSION = "2026-06-08-v1";
 const BASELINE_CATALOG_SETTING = "baselineCatalogVersion";
 const CLASSIFIER_RULE_SETTING = "classifierRuleVersion";
@@ -986,7 +986,7 @@ export class AppDatabase {
       aiModel: "gpt-4.1-mini", refreshTime: "08:30", proxyUrl: "", startAtLogin: "false",
       backgroundRefresh: "true",
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
-      cacheTtlHours: "6", maxReposPerWindow: "200", enableNotifications: "true", backupPath: ""
+      cacheTtlHours: "6", maxReposPerWindow: "320", enableNotifications: "true", backupPath: ""
     };
     const stmt = this.db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)");
     const insertDefaults = this.db.transaction(() => {
@@ -1000,24 +1000,24 @@ export class AppDatabase {
       { id: "github-trending", label: "GitHub Trending", configured: true, enabled: true, status: "unknown",
         message: "Ready to fetch daily, weekly, and monthly trending pages.", weight: 1, coverage: 0.8 },
       { id: "github-search", label: "GitHub Search API", configured: false, enabled: true, status: "degraded",
-        message: "Works best after adding a GitHub token.", weight: 0.9, coverage: 0.65 },
+        message: "Expanded GitHub searches cover AI skills, MCP, browser automation, local models, and domestic/international LLM stacks.", weight: 0.9, coverage: 0.75 },
       { id: "github-stargazers", label: "GitHub Stargazers API", configured: false, enabled: true, status: "disabled",
         message: "Configured automatically when GitHub token is present.", weight: 0.7, coverage: 0.35 },
       { id: "gh-archive", label: "GH Archive WatchEvents", configured: true, enabled: true, status: "unknown",
         message: "Direct WatchEvent sampling is ready; BigQuery can be added later for deeper backfill.",
         weight: 0.85, coverage: 0.32 },
-      { id: "third-party", label: "Third-party Trend Sources", configured: true, enabled: true, status: "unknown",
-        message: "Used only as supplemental cross-checks.", weight: 0.45, coverage: 0.2 }
+      { id: "third-party", label: "Open-source Directory Signals", configured: true, enabled: true, status: "unknown",
+        message: "Curated cross-checks from GitHub topics, open-source directories, MCP catalogs, prompt libraries, and browser automation ecosystems.", weight: 0.55, coverage: 0.42 }
     ];
     defaults.forEach((item) => this.upsertSourceHealth(item));
   }
 
   private ensureSocialSourceHealth(): void {
     const socialSources: SourceHealth[] = [
-      { id: "telegram-trends", label: "Telegram AI Channels", configured: true, enabled: true, status: "unknown",
-        message: "Monitors AI-focused Telegram channels for GitHub project signals.", weight: 0.7, coverage: 0.35 },
-      { id: "twitter-trends", label: "X (Twitter) AI Signals", configured: true, enabled: true, status: "unknown",
-        message: "Monitors AI discussions on X via public search and supplemental feeds.", weight: 0.65, coverage: 0.3 }
+      { id: "telegram-trends", label: "Telegram AI/Open-source Channels", configured: true, enabled: true, status: "unknown",
+        message: "Monitors AI, Claude Code, MCP, Qwen/DeepSeek, and developer-tool Telegram channels for GitHub project signals.", weight: 0.72, coverage: 0.45 },
+      { id: "twitter-trends", label: "X/Twitter AI + Browser Signals", configured: true, enabled: true, status: "unknown",
+        message: "Monitors X/Twitter-style public searches and supplemental topic pages for MCP, skills, browser automation, computer-use, and LLM projects.", weight: 0.68, coverage: 0.42 }
     ];
     socialSources.forEach((item) => this.upsertSourceHealth(item));
   }
@@ -1029,11 +1029,31 @@ export class AppDatabase {
       baselineRepo("github:langchain-ai/langchain", "langchain-ai/langchain", "Build context-aware reasoning applications and agent workflows.", 118000, 18000, 2100, "Python", "MIT", ["llm", "agents", "rag", "python"], "Framework for developing applications powered by language models, agents, tools, and retrieval.", 4320, 2),
       baselineRepo("github:ollama/ollama", "ollama/ollama", "Run large language models locally.", 145000, 12000, 1600, "Go", "MIT", ["llm", "local-ai", "model-serving", "inference"], "Get up and running with large language models locally.", 5280, 3),
       baselineRepo("github:modelcontextprotocol/servers", "modelcontextprotocol/servers", "Reference MCP servers for connecting AI assistants to tools and data.", 62000, 7200, 480, "TypeScript", "MIT", ["mcp", "tools", "agents", "typescript"], "Model Context Protocol servers expose filesystems, repositories, databases, and tools to AI clients.", 6960, 4),
-      baselineRepo("github:microsoft/autogen", "microsoft/autogen", "Programming framework for agentic AI.", 48000, 7200, 520, "Python", "MIT", ["agents", "multi-agent", "llm", "framework"], "A framework for creating multi-agent applications and conversational workflows.", 2760, 5),
+      baselineRepo("github:punkpeye/awesome-mcp-servers", "punkpeye/awesome-mcp-servers", "Curated directory of Model Context Protocol servers across files, browsers, databases, and SaaS tools.", 52000, 4400, 180, "Markdown", "MIT", ["mcp", "mcp-server", "awesome", "tools"], "Directory for discovering MCP servers, registries, browser tools, database tools, and agent integrations.", 6120, 5),
+      baselineRepo("github:appcypher/awesome-mcp-servers", "appcypher/awesome-mcp-servers", "Awesome list of MCP servers, clients, registries, and tool integrations.", 28000, 2600, 140, "Markdown", "MIT", ["mcp", "mcp-server", "mcp-client", "awesome"], "Curated MCP ecosystem map for server/client discovery and tool categories.", 4680, 6),
+      baselineRepo("github:github/github-mcp-server", "github/github-mcp-server", "GitHub MCP server for repository, issue, pull request, and code context tools.", 18000, 1300, 120, "Go", "MIT", ["mcp", "github", "tools", "mcp-server"], "MCP server that exposes GitHub repository and collaboration actions to AI clients.", 3900, 7),
+      baselineRepo("github:microsoft/playwright-mcp", "microsoft/playwright-mcp", "Playwright MCP server that gives AI agents browser automation capabilities.", 12000, 980, 90, "TypeScript", "MIT", ["mcp", "playwright", "browser-automation", "mcp-server"], "Browser automation MCP server for web actions, testing, and agent browsing workflows.", 4200, 8),
+      baselineRepo("github:browserbase/mcp-server-browserbase", "browserbase/mcp-server-browserbase", "Browserbase MCP server for cloud browser sessions and web automation agents.", 7000, 620, 60, "TypeScript", "MIT", ["mcp", "browserbase", "browser-automation", "tools"], "Cloud browser MCP integration for web agents and browser control workflows.", 3100, 9),
+      baselineRepo("github:upstash/context7", "upstash/context7", "MCP server that gives agents up-to-date library documentation and code examples.", 36000, 2200, 150, "TypeScript", "MIT", ["mcp", "documentation", "developer-tools", "agents"], "Context server for docs-aware coding agents and tool-augmented development workflows.", 5200, 10),
+      baselineRepo("github:microsoft/autogen", "microsoft/autogen", "Programming framework for agentic AI.", 48000, 7200, 520, "Python", "MIT", ["agents", "multi-agent", "llm", "framework"], "A framework for creating multi-agent applications and conversational workflows.", 2760, 11),
       baselineRepo("github:crewaiinc/crewai", "crewAIInc/crewAI", "Framework for orchestrating role-playing autonomous AI agents.", 33000, 4300, 340, "Python", "MIT", ["agents", "automation", "llm", "multi-agent"], "CrewAI helps coordinate agents, tasks, tools, and processes.", 2380, 6),
-      baselineRepo("github:run-llama/llama_index", "run-llama/llama_index", "Data framework for LLM applications and retrieval augmented generation.", 39000, 5300, 720, "Python", "MIT", ["rag", "llm", "knowledge-base", "retrieval"], "Connect private data to LLM applications through indexes, retrieval, and agents.", 2140, 7),
-      baselineRepo("github:cline/cline", "cline/cline", "Autonomous coding agent inside the IDE.", 52000, 6100, 880, "TypeScript", "Apache-2.0", ["coding-agent", "developer-tools", "llm", "vscode"], "Cline can use tools, edit files, run commands, and complete software tasks.", 3560, 8),
-      baselineRepo("github:browser-use/browser-use", "browser-use/browser-use", "Make websites accessible for AI agents.", 71000, 8200, 520, "Python", "MIT", ["agents", "browser", "automation", "llm"], "Browser automation primitives for AI agents that need to operate websites.", 4820, 9),
+      baselineRepo("github:run-llama/llama_index", "run-llama/llama_index", "Data framework for LLM applications and retrieval augmented generation.", 39000, 5300, 720, "Python", "MIT", ["rag", "llm", "knowledge-base", "retrieval"], "Connect private data to LLM applications through indexes, retrieval, and agents.", 2140, 27),
+      baselineRepo("github:dair-ai/Prompt-Engineering-Guide", "dair-ai/Prompt-Engineering-Guide", "Guide and learning map for prompt engineering and LLM workflows.", 57000, 5200, 160, "MDX", "MIT", ["prompt-engineering", "prompts", "learning"], "Prompt engineering guide with reusable patterns, prompt design, and workflow examples.", 2900, 28),
+      baselineRepo("github:langfuse/langfuse", "langfuse/langfuse", "Open-source LLM engineering platform for tracing, prompt management, evals, and metrics.", 13000, 1200, 220, "TypeScript", "MIT", ["llmops", "prompt-management", "evaluation", "observability"], "Prompt management, tracing, eval, and observability workflows for LLM applications.", 2480, 29),
+      baselineRepo("github:BerriAI/litellm", "BerriAI/litellm", "LLM gateway and model router for OpenAI-compatible APIs.", 28000, 3600, 420, "Python", "MIT", ["llm-gateway", "model-router", "openai-compatible"], "Gateway patterns for routing, fallback, usage tracking, and OpenAI-compatible provider abstractions.", 3100, 30),
+      baselineRepo("github:songquanpeng/one-api", "songquanpeng/one-api", "OpenAI-compatible API management and model forwarding gateway.", 24000, 4400, 260, "Go", "MIT", ["llm-gateway", "openai-compatible", "api-proxy"], "Domestic open-source gateway for unified model APIs, quota control, and provider routing.", 2760, 31),
+      baselineRepo("github:langgenius/dify", "langgenius/dify", "Open-source LLM app development platform with agents, workflows, RAG, and model providers.", 115000, 17000, 1500, "TypeScript", "Apache-2.0", ["llm-app", "agents", "workflow", "rag"], "LLM app platform covering workflow orchestration, agent tools, RAG, and provider integrations.", 5600, 32),
+      baselineRepo("github:labring/FastGPT", "labring/FastGPT", "Knowledge-base Q&A and agent workflow platform for LLM applications.", 25000, 6200, 480, "TypeScript", "Apache-2.0", ["rag", "agents", "llm-app", "workflow"], "Chinese open-source RAG and workflow platform for knowledge-base applications.", 3300, 33),
+      baselineRepo("github:QwenLM/Qwen-Agent", "QwenLM/Qwen-Agent", "Agent framework and browser/function calling examples for Qwen models.", 15000, 1700, 160, "Python", "Apache-2.0", ["qwen", "agents", "function-calling", "tool-calling"], "Function-calling and agent examples for Qwen models and domestic AI stacks.", 2600, 34),
+      baselineRepo("github:cline/cline", "cline/cline", "Autonomous coding agent inside the IDE.", 52000, 6100, 880, "TypeScript", "Apache-2.0", ["coding-agent", "developer-tools", "llm", "vscode"], "Cline can use tools, edit files, run commands, and complete software tasks.", 3560, 18),
+      baselineRepo("github:musistudio/claude-code-router", "musistudio/claude-code-router", "Route Claude Code requests across model providers and OpenAI-compatible endpoints.", 14000, 1600, 120, "TypeScript", "MIT", ["claude-code", "router", "openai-compatible", "llm-gateway"], "Claude Code routing patterns for provider selection, gateway control, and model fallback.", 2860, 19),
+      baselineRepo("github:SuperClaude-Org/SuperClaude_Framework", "SuperClaude-Org/SuperClaude_Framework", "Claude Code command framework with personas, slash commands, and workflow skills.", 17000, 2100, 140, "Python", "MIT", ["claude-code", "skills", "slash-commands", "prompts"], "Skill and command design patterns for Claude Code workflows and reusable agent operations.", 3400, 20),
+      baselineRepo("github:hesreallyhim/awesome-claude-code", "hesreallyhim/awesome-claude-code", "Curated Claude Code resources, commands, hooks, MCP integrations, and skills.", 9000, 820, 60, "Markdown", "MIT", ["claude-code", "awesome", "skills", "mcp"], "Discovery map for Claude Code skills, hooks, commands, and MCP integrations.", 2200, 21),
+      baselineRepo("github:OpenInterpreter/open-interpreter", "OpenInterpreter/open-interpreter", "Natural language interface for computers with code execution and local automation.", 60000, 5200, 520, "Python", "AGPL-3.0", ["computer-use", "automation", "agents", "local-ai"], "Computer-use patterns for code execution, local automation, and agent-operated desktops.", 4300, 22),
+      baselineRepo("github:e2b-dev/E2B", "e2b-dev/E2B", "Secure sandbox runtime for AI agents and code execution.", 9500, 900, 120, "Python", "Apache-2.0", ["computer-use", "sandbox", "agents", "tools"], "Sandboxed computer-use and tool execution infrastructure for AI agents.", 2800, 23),
+      baselineRepo("github:browser-use/browser-use", "browser-use/browser-use", "Make websites accessible for AI agents.", 71000, 8200, 520, "Python", "MIT", ["agents", "browser", "automation", "llm"], "Browser automation primitives for AI agents that need to operate websites.", 4820, 24),
+      baselineRepo("github:browserbase/stagehand", "browserbase/stagehand", "AI browser automation framework for reliable web workflows.", 14000, 1300, 130, "TypeScript", "MIT", ["browser-automation", "agents", "playwright"], "High-level browser automation patterns for AI web agents and browser workflows.", 3200, 25),
+      baselineRepo("github:microsoft/playwright", "microsoft/playwright", "Reliable end-to-end browser automation and testing framework.", 76000, 9000, 920, "TypeScript", "Apache-2.0", ["browser-automation", "playwright", "testing"], "Browser control foundation for web agents, testing, and automated browsing.", 1900, 26),
       baselineRepo("github:vllm-project/vllm", "vllm-project/vllm", "High-throughput and memory-efficient inference and serving engine for LLMs.", 36000, 5600, 980, "Python", "Apache-2.0", ["llm", "model-serving", "inference", "gpu"], "Serve large language models efficiently with paged attention and production APIs.", 1980, 10),
       baselineRepo("github:vercel/next.js", "vercel/next.js", "The React framework for production web applications.", 132000, 28000, 3100, "JavaScript", "MIT", ["react", "framework", "frontend", "web"], "Server rendering, routing, bundling, and frontend application architecture.", 1420, 11),
       baselineRepo("github:shadcn-ui/ui", "shadcn-ui/ui", "Beautifully designed components that you can copy and paste into your apps.", 92000, 6200, 950, "TypeScript", "MIT", ["react", "components", "ui", "design-system"], "A component system centered on ownership, accessibility, and product UI composition.", 1740, 12),

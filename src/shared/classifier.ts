@@ -12,7 +12,7 @@ type RuleMatch = {
   confidence: number;
 };
 
-export const CLASSIFIER_RULE_VERSION = "2026-06-08-ai-detail-v2";
+export const CLASSIFIER_RULE_VERSION = "2026-06-08-ai-taxonomy-v3";
 
 const AI_RULES: RuleMatch[] = [
   {
@@ -74,6 +74,67 @@ const AI_RULES: RuleMatch[] = [
   },
   {
     primary: "AI",
+    secondary: "MCP Servers",
+    keywords: [
+      "mcp server", "mcp-server", "mcp servers", "model context protocol server", "context server",
+      "mcp registry", "mcp marketplace", "mcp directory", "awesome mcp", "mcp tools server",
+      "filesystem mcp", "github mcp", "browser mcp", "playwright mcp", "database mcp", "slack mcp",
+      "mcp 服务", "mcp 服务器", "mcp 服务端", "mcp 目录", "mcp 市场", "mcp 注册表", "工具服务器"
+    ],
+    confidence: 0.96
+  },
+  {
+    primary: "AI",
+    secondary: "MCP Clients",
+    keywords: [
+      "mcp client", "mcp-client", "mcp host", "mcp gateway", "mcp router", "mcp inspector", "mcp cli",
+      "claude desktop mcp", "cursor mcp", "cline mcp", "roo code mcp", "vscode mcp", "agent client",
+      "mcp 客户端", "mcp 主机", "mcp 网关", "mcp 路由", "mcp 调试", "mcp 检查器"
+    ],
+    confidence: 0.94
+  },
+  {
+    primary: "AI",
+    secondary: "Tool Calling",
+    keywords: [
+      "tool calling", "function calling", "tool use", "tool-use", "agent tools", "tool router",
+      "tools api", "openai tools", "anthropic tools", "structured outputs", "json schema tools",
+      "function call", "tool adapter", "tool registry", "toolformer",
+      "工具调用", "函数调用", "工具使用", "工具路由", "工具适配器", "结构化输出", "工具注册"
+    ],
+    confidence: 0.9
+  },
+  {
+    primary: "AI",
+    secondary: "Browser Automation",
+    keywords: [
+      "browser automation", "browser agent", "browser-use", "browser use", "playwright", "puppeteer", "selenium",
+      "stagehand", "browserbase", "web automation", "web agent", "headless browser", "browser control",
+      "网页自动化", "浏览器自动化", "浏览器智能体", "网页智能体", "浏览器控制", "无头浏览器"
+    ],
+    confidence: 0.9
+  },
+  {
+    primary: "AI",
+    secondary: "Computer Use",
+    keywords: [
+      "computer use", "computer-use", "desktop automation", "screen agent", "ui automation", "visual agent",
+      "operate computer", "gui agent", "remote browser", "sandbox agent", "e2b", "open interpreter",
+      "电脑使用", "计算机使用", "桌面自动化", "屏幕智能体", "gui 智能体", "界面自动化", "沙箱智能体"
+    ],
+    confidence: 0.9
+  },
+  {
+    primary: "AI",
+    secondary: "AI Browsers",
+    keywords: [
+      "ai browser", "agent browser", "browser assistant", "arc browser ai", "dia browser", "perplexity comet",
+      "browser copilot", "web copilot", "浏览器助手", "ai 浏览器", "智能浏览器", "浏览器 copilot"
+    ],
+    confidence: 0.84
+  },
+  {
+    primary: "AI",
     secondary: "MCP/Tools",
     keywords: [
       "mcp", "model context protocol", "tool calling", "tools server", "agent tool",
@@ -125,6 +186,26 @@ const AI_RULES: RuleMatch[] = [
       "anthropic 接口", "claude 应用", "claude 模型", "claude 工具", "claude 工作流"
     ],
     confidence: 0.86
+  },
+  {
+    primary: "AI",
+    secondary: "Local Models",
+    keywords: [
+      "local llm", "local ai", "ollama", "llama.cpp", "gguf", "lm studio", "on-device llm", "edge llm",
+      "qwen", "deepseek", "chatglm", "internlm", "modelscope", "xinference", "llamacpp", "mlx-lm",
+      "本地大模型", "本地 ai", "端侧大模型", "离线大模型", "通义千问", "智谱", "书生浦语", "模型部署"
+    ],
+    confidence: 0.87
+  },
+  {
+    primary: "AI",
+    secondary: "LLM Gateways",
+    keywords: [
+      "llm gateway", "ai gateway", "model gateway", "model router", "llm router", "openai compatible",
+      "one-api", "litellm", "portkey", "openrouter", "new api", "api proxy", "model proxy",
+      "模型网关", "大模型网关", "模型路由", "openai 兼容", "api 代理", "统一网关"
+    ],
+    confidence: 0.88
   },
   {
     primary: "AI",
@@ -327,9 +408,11 @@ function learningValueFor(primary: PrimaryCategory, secondary: string, repo: Rep
     const name = repo.name || repo.fullName;
     if (secondary === "Coding Agents") return `Study how ${name} structures agentic coding loops, terminal/IDE tool use, and repository editing safeguards.`;
     if (secondary === "Prompts/Workflows") return `Review ${name} for reusable prompt patterns, evaluation flows, and workflow templates.`;
-    if (secondary === "MCP/Tools") return `Study how ${name} exposes tools, context, and permissions to AI clients through protocol-style integrations.`;
+    if (secondary === "MCP/Tools" || secondary === "MCP Servers" || secondary === "MCP Clients") return `Study how ${name} exposes tools, context, permissions, and client/server boundaries through protocol-style integrations.`;
+    if (secondary === "Tool Calling") return `Review ${name} for tool schemas, function-calling reliability, permission boundaries, and agent action design.`;
+    if (secondary === "Browser Automation" || secondary === "Computer Use" || secondary === "AI Browsers") return `Study how ${name} turns browser or desktop actions into safe, observable agent workflows.`;
     if (secondary === "Agent Frameworks") return `Study how ${name} orchestrates roles, memory, tools, and multi-agent control flow.`;
-    if (secondary === "Model Serving") return `Review ${name} for deployment, routing, batching, and local/hosted inference tradeoffs.`;
+    if (secondary === "Local Models" || secondary === "Model Serving" || secondary === "LLM Gateways") return `Review ${name} for deployment, routing, batching, local/hosted inference, and provider abstraction tradeoffs.`;
     return `Study how ${name} approaches ${secondary.toLowerCase()} patterns, project structure, and user-facing abstractions.`;
   }
   if (primary === "Developer Tools") {
@@ -345,7 +428,10 @@ function audienceFor(primary: PrimaryCategory, secondary: string): string {
   if (primary === "AI") {
     if (secondary === "Coding Agents") return "AI coding tool builders, CLI/IDE extension authors, and software engineering automation teams.";
     if (secondary === "Prompts/Workflows") return "Prompt engineers, AI product builders, and teams standardizing reusable LLM workflows.";
-    if (secondary === "MCP/Tools") return "Agent platform developers, tool integration authors, and local-first AI workflow builders.";
+    if (secondary === "MCP/Tools" || secondary === "MCP Servers" || secondary === "MCP Clients") return "Agent platform developers, tool integration authors, and local-first AI workflow builders.";
+    if (secondary === "Browser Automation" || secondary === "Computer Use" || secondary === "AI Browsers") return "AI browser automation builders, QA automation teams, and agent UX engineers.";
+    if (secondary === "Tool Calling") return "Agent runtime builders, API designers, and teams standardizing reliable tool execution.";
+    if (secondary === "Local Models" || secondary === "LLM Gateways") return "AI platform engineers, local model operators, and provider-routing infrastructure teams.";
     return `AI builders, agent platform developers, and engineers tracking ${secondary}.`;
   }
   if (primary === "Frontend/UI") return "Frontend engineers and product builders.";

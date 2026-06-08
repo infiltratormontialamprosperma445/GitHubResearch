@@ -21,17 +21,38 @@ const TELEGRAM_AI_CHANNELS = [
   "ai_breaking_news",
   "aicoding",
   "theaiguy",
-  "dailyaipapers"
+  "dailyaipapers",
+  "llm_agents",
+  "mcp_servers",
+  "claude_code",
+  "ai_developer_tools",
+  "openaidevs",
+  "aigc_cn",
+  "chatgpt_cn",
+  "deepseek_ai",
+  "qwen_ai",
+  "modelscope_cn"
 ];
 
 const TWITTER_AI_SEARCH_QUERIES = [
   "github.com Claude Code coding agent",
+  "github.com Claude Code skills slash commands",
   "github.com OpenAI agents SDK",
+  "github.com Codex CLI coding agent",
   "github.com ChatGPT prompt library",
   "github.com MCP server LLM",
+  "github.com MCP client inspector gateway",
+  "github.com function calling tool calling agent",
   "github.com coding agent CLI",
   "github.com aider cursor windsurf codex",
   "github.com prompt workflow LLM",
+  "github.com browser automation AI agent",
+  "github.com browser-use playwright MCP",
+  "github.com computer use desktop automation agent",
+  "github.com AI browser assistant",
+  "github.com LLM gateway model router openai compatible",
+  "github.com Qwen DeepSeek ChatGLM agent",
+  "github.com Dify FastGPT workflow agent",
   "github.com AI agent stars:>100",
   "github.com RAG retrieval vector",
   "github.com multimodal model open source",
@@ -54,7 +75,7 @@ const GITHUB_REPO_REGEX = /(?:https?:\/\/)?github\.com\/([A-Za-z0-9._-]+\/[A-Za-
 
 export class TelegramTrendAdapter implements SourceAdapter {
   id = "telegram-trends";
-  label = "Telegram AI Channels";
+  label = "Telegram AI/Open-source Channels";
   weight = 0.7;
   supportsBackfill = false;
   maxConcurrency = 3;
@@ -138,9 +159,9 @@ export class TelegramTrendAdapter implements SourceAdapter {
       configured: true,
       enabled: true,
       status: "healthy",
-      message: `Monitors ${TELEGRAM_AI_CHANNELS.length} AI-focused Telegram channels for GitHub project signals.`,
+      message: `Monitors ${TELEGRAM_AI_CHANNELS.length} AI, MCP, Claude Code, domestic LLM, and developer-tool Telegram channels for GitHub project signals.`,
       weight: this.weight,
-      coverage: 0.35
+      coverage: 0.45
     };
   }
 
@@ -188,7 +209,7 @@ export class TelegramTrendAdapter implements SourceAdapter {
 
 export class TwitterTrendAdapter implements SourceAdapter {
   id = "twitter-trends";
-  label = "X (Twitter) AI Signals";
+  label = "X/Twitter AI + Browser Signals";
   weight = 0.65;
   supportsBackfill = false;
   maxConcurrency = 2;
@@ -281,9 +302,9 @@ export class TwitterTrendAdapter implements SourceAdapter {
       configured: true,
       enabled: true,
       status: "healthy",
-      message: "Monitors AI discussions on X via Nitter public search and supplemental AI signal feeds.",
+      message: "Monitors X/Twitter-style public searches plus GitHub topic pages for MCP, skills, browser automation, computer-use, and LLM projects.",
       weight: this.weight,
-      coverage: 0.3
+      coverage: 0.42
     };
   }
 
@@ -341,7 +362,19 @@ export class TwitterTrendAdapter implements SourceAdapter {
     // Fetch from known AI news aggregation pages that list GitHub repos
     const feeds = [
       "https://huggingface.co/papers",
-      "https://paperswithcode.com/latest"
+      "https://paperswithcode.com/latest",
+      "https://github.com/topics/model-context-protocol",
+      "https://github.com/topics/mcp-server",
+      "https://github.com/topics/claude-code",
+      "https://github.com/topics/coding-agent",
+      "https://github.com/topics/browser-automation",
+      "https://github.com/topics/function-calling",
+      "https://github.com/topics/prompt-engineering",
+      "https://github.com/topics/rag",
+      "https://github.com/topics/llmops",
+      "https://github.com/trending/typescript?since=daily",
+      "https://github.com/trending/python?since=daily",
+      "https://github.com/trending/go?since=daily"
     ];
     const allLinks: string[] = [];
     const results = await runWithConcurrency(
@@ -409,8 +442,10 @@ function inferSocialTopics(text: string): string[] {
   const candidates = [
     "claude-code", "claude", "anthropic", "openai-agents", "openai", "chatgpt",
     "codex", "aider", "cursor", "windsurf", "cline", "roo-code", "openhands",
-    "coding-agent", "terminal-agent", "agent", "mcp-server", "mcp", "llm", "rag",
-    "prompt-library", "prompt-workflow", "prompt", "skills", "plugins", "ai", "ml", "model",
+    "coding-agent", "terminal-agent", "agent", "mcp-server", "mcp-client", "mcp", "tool-calling", "function-calling",
+    "browser-automation", "browser-agent", "computer-use", "ai-browser", "llm", "rag",
+    "prompt-library", "prompt-workflow", "prompt", "skills", "plugins", "slash-commands", "ai", "ml", "model",
+    "llm-gateway", "model-router", "local-models", "qwen", "deepseek", "chatglm", "dify", "fastgpt",
     "transformer", "diffusion", "fine-tune", "inference",
     "react", "cli", "security", "kubernetes"
   ];
