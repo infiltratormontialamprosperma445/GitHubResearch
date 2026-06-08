@@ -144,12 +144,12 @@ jobs:
           fi
           NOTES_FILE="$(mktemp)"
           cat > "$NOTES_FILE" <<EOF
-GitHubResearch $TAG
+          GitHubResearch $TAG
 
-Windows, macOS, and Linux desktop builds are attached below. GitHub automatically provides Source code archives for this tag.
+          Windows, macOS, and Linux desktop builds are attached below. GitHub automatically provides Source code archives for this tag.
 
-中文说明：下方附件为 GitHubResearch 桌面版 Windows、macOS、Linux 构建产物；Source code 压缩包由 GitHub 自动生成。本说明使用 UTF-8 写入，避免 Release 中文乱码。
-EOF
+          中文说明：下方附件为 GitHubResearch 桌面版 Windows、macOS、Linux 构建产物；Source code 压缩包由 GitHub 自动生成。本说明使用 UTF-8 写入，避免 Release 中文乱码。
+          EOF
 
           # Create or update release metadata so existing releases do not keep stale/garbled titles or notes.
           if gh release view "$TAG" >/dev/null 2>&1; then
