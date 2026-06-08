@@ -10,11 +10,11 @@
     "build": "tsc -b && npm run build:main && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "start": "npm run build && electron .",
-    "pack:win": "npm run prepare:icons && npm run build && electron-builder --win --dir",
-    "dist:win": "npm run prepare:icons && npm run build && electron-builder --win",
-    "dist:mac": "npm run build && electron-builder --mac",
-    "dist:mac:zip": "npm run build && electron-builder --mac zip --x64 --arm64",
-    "dist:linux": "npm run build && electron-builder --linux",
+    "pack:win": "npm run prepare:icons && npm run build && electron-builder --win --dir --publish never",
+    "dist:win": "npm run prepare:icons && npm run build && electron-builder --win --publish never",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "dist:mac:zip": "npm run build && electron-builder --mac zip --x64 --arm64 --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --publish never",
     "dist:all": "npm run dist:win && npm run dist:mac:zip",
     "dist": "npm run dist:win",
     "test": "vitest run"
@@ -157,6 +157,7 @@
         }
       ],
       "category": "Development",
+      "maintainer": "zrz2004 <zrz2004@users.noreply.github.com>",
       "synopsis": "GitHub Intelligence Workspace",
       "description": "Local-first research workspace for tracking, searching, and classifying trending GitHub repositories."
     },
